@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Mono:wght@400;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=auto-miners-fix-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -196,6 +196,25 @@
             </button>
           </div>
         </section>
+
+        <section id="specialists-panel" class="specialists-panel" aria-label="Auto Miner specialists" hidden>
+          <div class="panel-header">
+            <span class="panel-header__eyebrow">Auto Mine Crew</span>
+            <h2>Specialists</h2>
+          </div>
+
+          <div class="auto-mine-status">
+            <span class="auto-mine-status__label">Queue Field</span>
+            <strong id="auto-mine-field" class="auto-mine-status__value">3×3</strong>
+          </div>
+
+          <button id="start-auto-mine" class="contract-button contract-button--large auto-mine-start" type="button">
+            Start Mine
+          </button>
+
+          <div id="specialist-list" class="specialist-list"></div>
+          <p id="specialist-note" class="store-note">Surveyor required. Auto Miners run without shovels or flags.</p>
+        </section>
       </aside>
 
       <aside class="contracts-panel message-board-panel" aria-label="Message Board">
@@ -283,25 +302,6 @@
             Reset
           </button>
         </section>
-
-        <section id="specialists-panel" class="specialists-panel" aria-label="Auto Miner specialists" hidden>
-          <div class="panel-header">
-            <span class="panel-header__eyebrow">Auto Mine Crew</span>
-            <h2>Specialists</h2>
-          </div>
-
-          <div class="auto-mine-status">
-            <span class="auto-mine-status__label">Queue Field</span>
-            <strong id="auto-mine-field" class="auto-mine-status__value">3×3</strong>
-          </div>
-
-          <button id="start-auto-mine" class="contract-button contract-button--large auto-mine-start" type="button">
-            Start Mine
-          </button>
-
-          <div id="specialist-list" class="specialist-list"></div>
-          <p id="specialist-note" class="store-note">Surveyor required. Auto Miners run without shovels or flags.</p>
-        </section>
       </aside>
     </div>
 
@@ -339,6 +339,6 @@
     </div>
 
     <script src="config.js"></script>
-    <script src="game.js"></script>
+    <script src="game.js?v=auto-miners-fix-1"></script>
   </body>
 </html>
