@@ -2045,8 +2045,8 @@ select:disabled {
 
   .app-shell {
     flex-wrap: wrap;
-    max-width: 1280px;
+    max-width: none;
     min-width: 0;
-    width: min(100%, 1280px);
+    width: 100%;
   }
 }
