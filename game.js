@@ -241,7 +241,7 @@ function createRoundEquipmentState() {
 function createStartingContracts() {
   return {
     boardsUntilNext: CONTRACT_CONFIG.firstAfterBoards,
-    offeredId: null,
+    offeredIds: [],
     active: null,
     returnSettings: null,
     unlockedTypeCount: 1,
@@ -1664,13 +1664,13 @@ function updateChallengeUI() {
 function updateContractUI() {
   const contracts = player.contracts;
   const active = activeContractType();
-  const offered = offeredContractType();
+  const offered = offeredContractTypes();
 
   document.body.classList.toggle("is-contract-running", Boolean(active));
 
   if (active) {
     contractCountdownElement.textContent = "in field";
-  } else if (offered) {
+  } else if (offered.length >= availableContractSlotCount()) {
     contractCountdownElement.textContent = "ready";
   } else {
     contractCountdownElement.textContent = `${contracts.boardsUntilNext} board${contracts.boardsUntilNext === 1 ? "" : "s"}`;
@@ -1683,10 +1683,11 @@ function updateContractUI() {
 function renderMessageBoardList() {
   const tiles = [];
   const active = activeContractType();
-  const offered = offeredContractType();
 
   if (active) tiles.push(renderContractTile(active, "Active contract", false, settings.mines));
-  else if (offered) tiles.push(renderContractTile(offered, "Offer ready", true));
+  offeredContractTypes().forEach((contractType) => {
+    tiles.push(renderContractTile(contractType, "Offer ready", !active));
+  });
 
   activeChallenges().forEach((challenge) => {
     tiles.push(renderChallengeTile(challenge));
@@ -1704,7 +1705,7 @@ function renderContractTile(contractType, status, canAccept, mineCount = null) {
     ? contractDigCapacityMessage(contractType)
     : "";
   const action = canAccept
-    ? `<button id="start-contract" class="contract-button message-tile__button" type="button"${disabled ? " disabled" : ""}${title ? ` title="${title}"` : ""}>Accept</button>`
+    ? `<button class="contract-button message-tile__button js-start-contract" type="button" data-contract-id="${contractType.id}"${disabled ? " disabled" : ""}${title ? ` title="${title}"` : ""}>Accept</button>`
     : "";
 
   return `
@@ -1763,8 +1764,8 @@ function updateContractModal(contractType) {
   contractModalFlagsElement.textContent = `${contractType.mines.max}`;
 }
 
-function acceptOfferedContract() {
-  const contractType = offeredContractType();
+function acceptOfferedContract(contractId) {
+  const contractType = offeredContractTypes().find((type) => type.id === contractId);
   if (!contractType || isContractActive()) return;
   if (!hasContractDigCapacity(contractType)) {
     statusElement.textContent = contractDigCapacityMessage(contractType);
@@ -1778,7 +1779,7 @@ function acceptOfferedContract() {
     previousSettings: { ...settings },
     briefingOpen: true,
   };
-  player.contracts.offeredId = null;
+  player.contracts.offeredIds = offeredContractIds().filter((id) => id !== contractType.id);
   settings = {
     rows: contractType.rows,
     cols: contractType.cols,
@@ -1801,8 +1802,17 @@ function activeContractType() {
   return player.contracts.active ? contractTypeById(player.contracts.active.id) : null;
 }
 
-function offeredContractType() {
-  return player.contracts.offeredId ? contractTypeById(player.contracts.offeredId) : null;
+function offeredContractIds() {
+  if (Array.isArray(player.contracts.offeredIds)) {
+    return [...new Set(player.contracts.offeredIds)].filter((id) => contractTypeById(id));
+  }
+  return player.contracts.offeredId && contractTypeById(player.contracts.offeredId)
+    ? [player.contracts.offeredId]
+    : [];
+}
+
+function offeredContractTypes() {
+  return offeredContractIds().map(contractTypeById).filter(Boolean);
 }
 
 function contractTypeById(id) {
@@ -1855,7 +1865,7 @@ function contractDigCapacityMessage(contractType) {
 
 function advanceContractSchedule() {
   const contracts = player.contracts;
-  if (contracts.offeredId || contracts.active) return;
+  if (contracts.active || availableContractTypes().length === 0) return;
 
   contracts.boardsUntilNext = Math.max(0, contracts.boardsUntilNext - 1);
   if (contracts.boardsUntilNext > 0) return;
@@ -1866,17 +1876,37 @@ function advanceContractSchedule() {
     return;
   }
 
-  contracts.offeredId = offer.id;
+  addContractOffer(offer.id);
+  contracts.boardsUntilNext = randomContractDelay();
   statusElement.textContent = formatMessage("contractReady", { name: offer.name });
 }
 
 function rollContractOffer(ignoreCooldowns = false) {
-  const available = CONTRACT_CONFIG.types.filter((type, index) => (
-    index < player.contracts.unlockedTypeCount
-    && (ignoreCooldowns || (player.contracts.cooldowns[index] || 0) <= 0)
-  ));
+  const available = availableContractTypes(ignoreCooldowns);
   if (available.length === 0) return null;
   return available[Math.floor(Math.random() * available.length)];
+}
+
+function availableContractTypes(ignoreCooldowns = false) {
+  const unavailableIds = new Set(offeredContractIds());
+  if (player.contracts.active?.id) unavailableIds.add(player.contracts.active.id);
+
+  return CONTRACT_CONFIG.types.filter((type, index) => (
+    index < player.contracts.unlockedTypeCount
+    && !unavailableIds.has(type.id)
+    && (ignoreCooldowns || (player.contracts.cooldowns[index] || 0) <= 0)
+  ));
+}
+
+function availableContractSlotCount() {
+  return CONTRACT_CONFIG.types
+    .slice(0, player.contracts.unlockedTypeCount)
+    .filter((type) => !player.contracts.active || player.contracts.active.id !== type.id)
+    .length;
+}
+
+function addContractOffer(contractId) {
+  player.contracts.offeredIds = [...new Set([...offeredContractIds(), contractId])];
 }
 
 function generateContractOffer() {
@@ -1886,9 +1916,13 @@ function generateContractOffer() {
   }
 
   const offer = rollContractOffer(true);
-  if (!offer) return;
+  if (!offer) {
+    statusElement.textContent = "All available contract types are already posted.";
+    updateContractUI();
+    return;
+  }
 
-  player.contracts.offeredId = offer.id;
+  addContractOffer(offer.id);
   statusElement.textContent = formatMessage("contractReady", { name: offer.name });
   updateContractUI();
 }
@@ -2221,7 +2255,8 @@ upgradeElements.widerGrid.addEventListener("click", () => buyUpgrade("widerGrid"
 abilityElements.safetyRadius.addEventListener("click", () => buyAbility("safetyRadius"));
 abilityElements.chording.addEventListener("click", () => buyAbility("chording"));
 messageBoardListElement.addEventListener("click", (event) => {
-  if (event.target.closest("#start-contract")) acceptOfferedContract();
+  const button = event.target.closest(".js-start-contract");
+  if (button) acceptOfferedContract(button.dataset.contractId);
 });
 generateContractButton.addEventListener("click", generateContractOffer);
 generateChallengeButton.addEventListener("click", generateChallengeOffer);
