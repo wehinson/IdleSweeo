@@ -1,0 +1,257 @@
+// Sweeper Inc. tuning and copy file.
+//
+// Upgrade ids are internal and should not be changed after players have started a save.
+// Edit `name`, `description`, `baseCost`, `growth`, and the messages below to rebalance or
+// rename the game without changing game.js. The message guide describes where each message appears.
+window.SWEEPER_INC_CONFIG = {
+  currencySymbol: "$",
+  startingCoins: 10000,
+  startingShovels: 10,
+  startingFlags: 15,
+  startingMines: 0,
+  digCostPerTile: 1,
+  gridLimits: { min: 3, max: 12 },
+
+  reveal: {
+    tileDelayMs: 48,
+    waveDelayMs: 42,
+  },
+
+  shovel: {
+    supplyCost: 25,
+    flagBundleSize: 5,
+    flagSupplyCost: 10,
+    supplyCostMultiplierPerTier: 1.5,
+    tiers: [
+      { name: "Wooden", durability: 10 },
+      { name: "Copper", durability: 12 },
+      { name: "Iron", durability: 25 },
+      { name: "Steel", durability: 45 },
+      { name: "Titanium", durability: 75 },
+      { name: "Obsidian", durability: 120 },
+      { name: "Diamond", durability: 200 },
+    ],
+  },
+
+  treasure: {
+    startingMinimumCoins: 6,
+    startingMaximumCoins: 16,
+    minimumGrowth: 2,
+    maximumGrowth: 4,
+  },
+
+  curio: {
+    itemCount: 10,
+    baseChance: 0.001,
+    maxChance: 0.05,
+    missDecay: 0.96,
+  },
+
+  upgrades: {
+    shovelCapacityCosts: [120, 260, 520],
+    flagCapacityCosts: [160, 350, 800],
+    betterFlagsChancePerLevel: 0.05,
+    mineYieldPercentPerLevel: 0.01,
+  },
+
+  abilities: {
+    safetyRadiusCosts: [40, 120, 320, 900, 2500],
+    chordingMineCost: 3,
+  },
+
+  mineCollection: {
+    steelBaseChance: 0.05,
+    betterShovelChancePerTier: 0.05,
+  },
+
+  capacity: {
+    shovel: [10, 20, 35, 50],
+    flags: [15, 100, 250, 500],
+  },
+
+  emergencyShovel: {
+    enabled: true,
+    durability: 5,
+    warning: "There will be no more handouts. Use your money wisely.",
+  },
+
+  contracts: {
+    firstAfterBoards: 10,
+    minBoardsBetween: 10,
+    maxBoardsBetween: 30,
+    lossCooldownGames: 150,
+    types: [
+      {
+        id: "abandonedYard",
+        name: "Abandoned Yard",
+        description: "A tight salvage lot with a few buried charges.",
+        rows: 10,
+        cols: 15,
+        mines: { min: 5, max: 8 },
+        rewardCoins: 250,
+        rewardMines: 2,
+      },
+      {
+        id: "coalSeam",
+        name: "Coal Seam",
+        description: "A wide seam with pressure pockets through the whole run.",
+        rows: 7,
+        cols: 20,
+        mines: { min: 10, max: 15 },
+        rewardCoins: 650,
+        rewardMines: 4,
+      },
+      {
+        id: "floodedQuarry",
+        name: "Flooded Quarry",
+        description: "A tall quarry shaft with old blasting caps still underfoot.",
+        rows: 25,
+        cols: 10,
+        mines: { min: 17, max: 30 },
+        rewardCoins: 1400,
+        rewardMines: 7,
+      },
+      {
+        id: "crystalCavern",
+        name: "Crystal Cavern",
+        description: "A glittering cavern where caches tend to cluster near danger.",
+        rows: 20,
+        cols: 20,
+        mines: { min: 36, max: 44 },
+        rewardCoins: 3000,
+        rewardMines: 12,
+        bonusTreasures: 4,
+        nearMineTreasureWeight: 5,
+      },
+      {
+        id: "ruinedArmory",
+        name: "Ruined Armory",
+        description: "A ruined depot with recoverable ordnance everywhere.",
+        rows: 25,
+        cols: 20,
+        mines: { min: 45, max: 55 },
+        rewardCoins: 5000,
+        rewardMines: 20,
+        recoveryBonus: 0.25,
+      },
+      {
+        id: "battlefield",
+        name: "Battlefield",
+        description: "A huge field of overlapping charges and buried scrap.",
+        rows: 30,
+        cols: 40,
+        mines: { min: 150, max: 220 },
+        rewardCoins: 10000,
+        rewardMines: 35,
+      },
+    ],
+  },
+
+  messageBoard: {
+    challenges: {
+      maxActive: 4,
+      minSecondsBetween: 300,
+      maxSecondsBetween: 900,
+      minLifetimeSeconds: 900,
+      maxLifetimeSeconds: 3600,
+      lifetimeStepSeconds: 300,
+      rewardBaseCoins: 80,
+      rewardCoinsPerTile: 3,
+      rewardCoinsPerMine: 18,
+      sizeAnyChance: 0.22,
+      mineAnyChance: 0.15,
+      types: [
+        { id: "flagLimit", name: "Flag Discipline" },
+        { id: "noChording", name: "Manual Sweep" },
+        { id: "speedClear", name: "Rush Job", seconds: 90 },
+      ],
+    },
+  },
+
+  // This is the only reveal order used by the Workshop. Internal ids stay stable.
+  progression: {
+    order: ["tallerGrid", "widerGrid", "improveShovel", "addMine", "addTreasure", "mineYield", "treasureValue", "betterFlags"],
+    items: {
+      tallerGrid: { name: "Taller Grid", description: "Unlock {next} rows for future rounds.", baseCost: 80, growth: 1.5 },
+      widerGrid: { name: "Wider Grid", description: "Unlock {next} columns for future rounds.", baseCost: 80, growth: 1.5 },
+      addMine: { name: "Add Mine", description: "Unlock {next} mines per board.", baseCost: 90, growth: 1.8 },
+      addTreasure: { name: "Add Treasure", description: "Unlock another chest; chests never exceed mines.", baseCost: 80, growth: 1.75 },
+      improveShovel: { name: "Improve Shovel", description: "Advance from {current} to {next}.", finalDescription: "{current} is the final shovel tier.", baseCost: 60, growth: 2.2 },
+      mineYield: { name: "Mine Yield", description: "Increase the end-of-round bonus per extra mine.", baseCost: 180, growth: 1.9 },
+      treasureValue: { name: "Richer Caches", description: "Increase the average value of treasure caches.", baseCost: 100, growth: 1.8 },
+      betterFlags: { name: "Better Flags", description: "Improve mine recovery, but increase the cost of new flags.", baseCost: 150, growth: 2 },
+    },
+  },
+
+  copy: {
+    tooltips: {
+      shovel: "Needed to dig. Upgrade for more powerful tools.",
+      flags: "Needed to mark mines. Upgrade for better mine retrieval.",
+      minesLocked: "Purchase a Steel Shovel to unlock.",
+      minesUnlocked: "Used to purchase Upgrades and Abilities.",
+    },
+    upgradeLabels: {
+      shovelLocker: "Shovel Locker",
+      flagLocker: "Flag Locker",
+      buyShovel: "Buy Shovels",
+      buyFlags: "Buy Flags",
+    },
+    messageGuide: {
+      status: "Shown in the status line below the HUD.",
+      resourceTooltips: "Shown when hovering over the Shovels, Flags, or Mines resource card.",
+      settingsNote: "Shown below the board selectors in the Operator Panel.",
+      storeNote: "Shown below the supply purchase buttons.",
+      upgradeDescriptions: "Shown inside each upgrade button.",
+    },
+  },
+
+  messages: {
+    idle: "Sweep the grid. Right-click or long-press to flag.",
+    idleNoShovels: "No shovels left. Visit the Quartermaster before digging.",
+    noShovels: "Your shovels are spent. Buy a fresh one between rounds.",
+    cleanHit: "Clean hit. Keep sweeping.",
+    shovelsSpent: "Shovels spent. Restock between rounds to keep sweeping.",
+    finishRound: "Finish this round before changing the board choice.",
+    flagPouchEmpty: "Flag pouch empty. Buy five more between rounds.",
+    flagPlanted: "Flag planted.",
+    flagCleared: "Flag cleared.",
+    chordNeedsFlags: "Chording needs {required} nearby flags; {actual} planted.",
+    chordNoShovel: "No shovels left. Restock between rounds.",
+    chordingComplete: "Chording complete.",
+    treasureFound: "Treasure found: +{value} at round end.",
+    curioFound: " Mine Curio #{item} logged.",
+    boomWaiting: "Boom. The shovel shattered. Sweeper Inc. reset is waiting.",
+    boardClear: "Board clear.{reward}{recovery}",
+    rewardSuffix: " +{value} earned.",
+    noTreasurePayout: " No treasure payout.",
+    recoverySuffix: " {count} mine{plural} recovered.",
+    suppliesShovel: "Fresh shovel stocked. Back to work.",
+    suppliesFlags: "Flag bundle stocked: +{count}.",
+    upgradeInstalled: "{name} upgraded.",
+    storageExpanded: "{kind} storage expanded.",
+    tallerUnlocked: "Taller Grid unlocked: {value} rows available.",
+    widerUnlocked: "Wider Grid unlocked: {value} columns available.",
+    safetyInstalled: "Safety Radius {value} installed.",
+    chordingUnlocked: "Chording unlocked. Double-click an open numbered tile.",
+    abilityInstalled: "Ability installed.",
+    progressReset: "Progress reset. Fresh purse, fresh tools, fresh ledger.",
+    emergency: "{prefix}Quartermaster comped one emergency shovel: {count} digs. {warning}",
+    suppliesReady: "Supplies are stocked between rounds. {name} shovels last {durability} digs.",
+    suppliesLocked: "Supplies are locked until this round ends.",
+    finalShovel: "{name} is the final shovel tier.",
+    safetyMax: "Radius 5 is the current cap",
+    chordingReady: "Double-click a numbered tile",
+    chordingDescription: "Regular Minesweeper chording",
+    noCompletedBoards: "No completed boards yet.",
+    settingsNote: "{mines} mine{plural}, placed after the first click. {safety}",
+    safetyNote: "Radius {radius} safety.",
+    firstTileSafe: "First tile is safe.",
+    contractReady: "Contract ready: {name}. Check the Message Board.",
+    contractStarted: "Contract started: {name}. Clear it to claim the reward.",
+    contractNeedsShovels: "Need {needed} digs to accept {name}. Current capacity: {available}.",
+    contractWon: "Contract complete: {name}. +{coins} and +{mines} mine{plural}.",
+    contractLost: "Contract failed: {name}. That contract type is unavailable for {count} games.",
+    challengeReady: "Challenge posted: {name}.",
+    challengeWon: " Challenge complete: {name}. +{coins}.",
+  },
+};
