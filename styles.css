@@ -2039,14 +2039,14 @@ select:disabled {
 @media (min-width: 1121px) {
   body {
     height: 100vh;
-    overflow-x: hidden;
+    overflow-x: auto;
     overflow-y: hidden;
   }
 
   .app-shell {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     max-width: none;
-    min-width: 0;
-    width: 100%;
+    min-width: max-content;
+    width: max-content;
   }
 }
