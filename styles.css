@@ -1309,6 +1309,10 @@ body.is-contract-running .cabinet {
   opacity: 0.56;
 }
 
+.specialist-card:has(.worker-buy:not(:disabled)) {
+  opacity: 1;
+}
+
 .specialist-card__topline {
   align-items: center;
   display: flex;
@@ -1349,7 +1353,13 @@ body.is-contract-running .cabinet {
   font-size: 0.46rem;
   line-height: 1.25;
   min-height: 30px;
+  opacity: 1 !important;
   padding: 6px 8px;
+}
+
+.worker-buy:not(:disabled) {
+  filter: none;
+  opacity: 1 !important;
 }
 
 .worker-buy:disabled {
