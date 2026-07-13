@@ -81,6 +81,7 @@ const autoMinersButton = document.querySelector("#auto-miners-button");
 const quartermasterPanelElement = document.querySelector("#quartermaster-panel");
 const specialistsPanelElement = document.querySelector("#specialists-panel");
 const autoMineFieldElement = document.querySelector("#auto-mine-field");
+const surveyorCardElement = document.querySelector("#surveyor-card");
 const agentListElement = document.querySelector("#agent-list");
 const specialistListElement = document.querySelector("#specialist-list");
 const specialistNoteElement = document.querySelector("#specialist-note");
@@ -130,11 +131,13 @@ const GAME_MODES = {
   autoMiners: "autoMiners",
 };
 
+let autoQueueView = false;
+
 const SPECIALISTS = [
   {
     id: "surveyor",
     name: "Surveyor",
-    group: "agents",
+    group: "queue",
     currency: "coins",
     baseCost: 100,
     task: "Finds a field on a timer and opens its first safe area. Level 10 opens 3x3; level 20 opens 5x5.",
@@ -696,6 +699,17 @@ function startGame() {
 function render() {
   const isAutoMode = currentMode === GAME_MODES.autoMiners;
   boardElement.innerHTML = "";
+  if (isAutoMode && autoQueueView) {
+    renderAutoQueueView();
+    updateQuartermaster();
+    updateModeUI();
+    updateProgressionUI();
+    updateCurioUI();
+    updateContractUI();
+    updateChallengeUI();
+    updateStatsUI();
+    return;
+  }
   if (isAutoMode && !hasActiveAutoField()) {
     boardElement.classList.remove("is-revealing");
     boardElement.removeAttribute("style");
@@ -1558,6 +1572,7 @@ function resetProgress() {
   currentMode = GAME_MODES.fieldQueue;
   fieldQueueState = null;
   autoMinersState = null;
+  autoQueueView = false;
   contractModalElement.hidden = true;
   document.body.classList.remove("is-contract-running", "is-auto-miners");
   startGame();
@@ -1566,6 +1581,12 @@ function resetProgress() {
 }
 
 function switchToFieldQueue() {
+  if (currentMode === GAME_MODES.autoMiners) {
+    saveAutoActiveField();
+    autoQueueView = true;
+    render();
+    return;
+  }
   if (currentMode === GAME_MODES.fieldQueue) return;
   saveCurrentModeState();
   currentMode = GAME_MODES.fieldQueue;
@@ -1575,9 +1596,15 @@ function switchToFieldQueue() {
 }
 
 function switchToAutoMiners() {
-  if (currentMode === GAME_MODES.autoMiners) return;
+  if (currentMode === GAME_MODES.autoMiners) {
+    autoQueueView = false;
+    loadAutoActiveField();
+    render();
+    return;
+  }
   saveCurrentModeState();
   currentMode = GAME_MODES.autoMiners;
+  autoQueueView = false;
   document.body.classList.add("is-auto-miners");
   if (!autoMinersState) autoMinersState = createAutoMinersState();
   loadAutoActiveField();
@@ -1590,7 +1617,7 @@ function createAutoMinersState() {
     queue: [],
     workerFields: Object.fromEntries(SPECIALISTS.map((worker) => [worker.id, 0])),
     initiative: {
-      agents: ["surveyor", "excavator", "flagbearer"],
+      agents: ["excavator", "flagbearer"],
       specialists: SPECIALISTS.filter((worker) => worker.group === "specialists").map((worker) => worker.id),
     },
     lastSurveyAt: performance.now(),
@@ -1854,13 +1881,13 @@ function surveyorSafetyRadius() {
 function surveyorIntervalMs() {
   const level = specialistLevel("surveyor");
   if (level <= 1) return 60000;
-  return Math.max(5000, Math.round(60000 / (1 + (level - 1))));
+  return Math.max(5000, Math.round(60000 / (1 + (level - 1) * 0.16)));
 }
 
 function updateModeUI() {
   const isAutoMode = currentMode === GAME_MODES.autoMiners;
-  fieldQueueButton.classList.toggle("is-active", !isAutoMode);
-  autoMinersButton.classList.toggle("is-active", isAutoMode);
+  fieldQueueButton.classList.toggle("is-active", !isAutoMode || autoQueueView);
+  autoMinersButton.classList.toggle("is-active", isAutoMode && !autoQueueView);
   quartermasterPanelElement.setAttribute("aria-label", isAutoMode ? "Auto Miner specialists" : "Quartermaster inventory and store");
   specialistsPanelElement.hidden = !isAutoMode;
   document.body.classList.toggle("is-auto-miners", isAutoMode);
@@ -1871,8 +1898,52 @@ function updateModeUI() {
   specialistNoteElement.textContent = surveyorLevel > 0
     ? `Surveyor reports every ${formatClock(surveyorIntervalMs())}. Starting area: ${surveyorSafetyRadius() === 2 ? "5x5" : surveyorSafetyRadius() === 1 ? "3x3" : "1 tile"}.`
     : "Hire a Surveyor to begin building the Field Queue.";
+  renderSurveyorCard();
   renderWorkerList(agentListElement, "agents");
   renderWorkerList(specialistListElement, "specialists");
+}
+
+function renderSurveyorCard() {
+  const worker = SPECIALISTS.find((item) => item.id === "surveyor");
+  const level = specialistLevel(worker.id);
+  const cost = workerCost(worker);
+  const affordable = player.coins >= cost;
+  surveyorCardElement.innerHTML = `
+    <article class="specialist-card${level > 0 ? " is-active" : " is-locked"}">
+      <div class="specialist-card__topline"><strong>${worker.name}</strong><b>${level > 0 ? `LV ${level}` : "AVAILABLE"}</b></div>
+      <p>${worker.task} Current schedule: ${formatClock(surveyorIntervalMs())}.</p>
+      <button class="worker-buy" type="button" data-worker-buy="surveyor" ${affordable ? "" : "disabled"}>${formatWorkerCost(worker, cost)}</button>
+    </article>
+  `;
+  surveyorCardElement.querySelector("[data-worker-buy]").addEventListener("click", () => buyWorker("surveyor"));
+}
+
+function renderAutoQueueView() {
+  boardElement.className = "auto-queue-list";
+  boardElement.removeAttribute("style");
+  boardElement.setAttribute("aria-label", "Auto Miner field queue");
+  if (!autoMinersState.queue.length) {
+    boardElement.innerHTML = '<p class="queue-empty">The Field Queue is empty</p>';
+    return;
+  }
+  const workerNames = Object.fromEntries(SPECIALISTS.map((worker) => [worker.id, worker.name]));
+  const assignments = Object.fromEntries(SPECIALISTS.map((worker) => [worker.id, []]));
+  Object.entries(autoMinersState.workerFields).forEach(([id, field]) => {
+    if (assignments[id] && field < autoMinersState.queue.length) assignments[id].push(field);
+  });
+  boardElement.innerHTML = autoMinersState.queue.map((field, index) => {
+    const assigned = Object.entries(assignments)
+      .filter(([, fields]) => fields.includes(index))
+      .map(([id]) => workerNames[id]);
+    const actualMines = field.board.filter((cell) => cell.mine).length;
+    const openTiles = field.board.filter((cell) => cell.open).length;
+    return `
+      <article class="queued-field-card${index === 0 ? " is-front" : ""}">
+        <div class="queued-field-card__topline"><strong>Field ${index + 1}${index === 0 ? " · FRONT" : ""}</strong><b>${field.settings.rows}×${field.settings.cols}</b></div>
+        <p>${openTiles} open · ${actualMines} mines · ${assigned.length ? assigned.join(", ") : "No worker assigned"}</p>
+      </article>
+    `;
+  }).join("");
 }
 
 function renderWorkerList(element, group) {

@@ -1237,6 +1237,57 @@ body.is-contract-running .cabinet {
   text-align: center;
 }
 
+.auto-queue-list {
+  align-content: start;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  height: 100%;
+  overflow: auto;
+  padding: 12px;
+}
+
+.queued-field-card {
+  align-content: start;
+  background: #080d13;
+  border: 2px solid rgba(216, 255, 232, 0.16);
+  border-radius: 5px;
+  display: grid;
+  gap: 8px;
+  min-height: 94px;
+  padding: 12px;
+}
+
+.queued-field-card.is-front {
+  border-color: rgba(46, 196, 182, 0.82);
+}
+
+.queued-field-card__topline {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.queued-field-card strong,
+.queued-field-card b {
+  color: var(--screen-glow);
+  font-family: "Press Start 2P", system-ui, sans-serif;
+  font-size: 0.52rem;
+  line-height: 1.35;
+}
+
+.queued-field-card b {
+  color: var(--yellow);
+}
+
+.queued-field-card p {
+  color: rgba(247, 255, 247, 0.68);
+  font-size: 0.66rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
 .specialist-card {
   background: #080d13;
   border: 2px solid rgba(216, 255, 232, 0.16);
