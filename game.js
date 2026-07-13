@@ -72,6 +72,9 @@ const contractModalRewardElement = document.querySelector("#contract-modal-rewar
 const contractModalDigsElement = document.querySelector("#contract-modal-digs");
 const contractModalFlagsElement = document.querySelector("#contract-modal-flags");
 const contractModalStartButton = document.querySelector("#contract-modal-start");
+const fieldClearModalElement = document.querySelector("#field-clear-modal");
+const fieldClearModalDescriptionElement = document.querySelector("#field-clear-modal-description");
+const fieldClearModalDismissButton = document.querySelector("#field-clear-modal-dismiss");
 const specialEquipmentStoreElement = document.querySelector("#special-equipment-store");
 const specialEquipmentListElement = document.querySelector("#special-equipment-list");
 const equipmentToggleButton = document.querySelector("#equipment-toggle");
@@ -1577,6 +1580,7 @@ function resetProgress() {
   autoMinersState = null;
   autoQueueView = false;
   contractModalElement.hidden = true;
+  fieldClearModalElement.hidden = true;
   document.body.classList.remove("is-contract-running", "is-auto-miners");
   startGame();
   statusElement.textContent = formatMessage("progressReset");
@@ -1630,6 +1634,7 @@ function createAutoMinersState() {
 }
 
 function tickAutoMiners() {
+  if (!fieldClearModalElement.hidden) return;
   if (!autoMinersState) {
     updateSurveyorUI();
     return;
@@ -1757,6 +1762,7 @@ function createQueuedField() {
 function runWorkerInitiative(group) {
   const order = autoMinersState.initiative[group] || [];
   order.forEach((id) => {
+    if (!fieldClearModalElement.hidden) return;
     const level = specialistLevel(id);
     if (id === "surveyor" || level <= 0) return;
     for (let turn = 0; turn < level; turn += 1) runWorkerTurn(id);
@@ -1904,6 +1910,10 @@ function resolveQueuedField(queueIndex, cleared) {
   autoMinersState.queue.splice(queueIndex, 1);
   normalizeWorkerFieldsAfterRemoval(queueIndex);
   autoMinersState.statusText = `Field cleared.${roundPayout > 0 ? ` +${formatCurrency(roundPayout)} earned.` : " No treasure payout."}`;
+  fieldClearModalDescriptionElement.textContent = roundPayout > 0
+    ? `The crew cleared a field and earned ${formatCurrency(roundPayout)}.`
+    : "The crew cleared a field. No treasure payout was found.";
+  fieldClearModalElement.hidden = false;
 }
 
 function specialistLevel(id) {
@@ -2981,6 +2991,13 @@ generateContractButton.addEventListener("click", generateContractOffer);
 generateChallengeButton.addEventListener("click", generateChallengeOffer);
 surveyNowButton.addEventListener("click", surveyNow);
 contractModalStartButton.addEventListener("click", closeContractBriefing);
+fieldClearModalDismissButton.addEventListener("click", () => {
+  fieldClearModalElement.hidden = true;
+  if (currentMode === GAME_MODES.autoMiners) {
+    loadAutoActiveField();
+    render();
+  }
+});
 resetButton.addEventListener("click", () => {
   if (currentMode === GAME_MODES.autoMiners) {
     switchToFieldQueue();
