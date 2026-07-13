@@ -60,14 +60,14 @@
               <div id="equipment-inventory-list" class="equipment-inventory__list"></div>
             </div>
           </div>
-          <div class="buttons" aria-hidden="true">
-            <span></span>
-            <span></span>
+          <div class="buttons" aria-label="Cabinet mode controls">
+            <button id="field-queue-button" class="cabinet-mode-button is-active" type="button">Field Queue</button>
+            <button id="auto-miners-button" class="cabinet-mode-button cabinet-mode-button--green" type="button">Auto Miners</button>
           </div>
         </section>
       </main>
 
-      <aside class="quartermaster-panel" aria-label="Quartermaster inventory and store">
+      <aside id="quartermaster-panel" class="quartermaster-panel" aria-label="Quartermaster inventory and store">
         <div class="panel-header">
           <span class="panel-header__eyebrow">Supply Deck</span>
           <h2>Quartermaster's</h2>
@@ -282,6 +282,25 @@
           <button id="reset-progress" class="progress-reset__button" type="button">
             Reset
           </button>
+        </section>
+
+        <section id="specialists-panel" class="specialists-panel" aria-label="Auto Miner specialists" hidden>
+          <div class="panel-header">
+            <span class="panel-header__eyebrow">Auto Mine Crew</span>
+            <h2>Specialists</h2>
+          </div>
+
+          <div class="auto-mine-status">
+            <span class="auto-mine-status__label">Queue Field</span>
+            <strong id="auto-mine-field" class="auto-mine-status__value">3×3</strong>
+          </div>
+
+          <button id="start-auto-mine" class="contract-button contract-button--large auto-mine-start" type="button">
+            Start Mine
+          </button>
+
+          <div id="specialist-list" class="specialist-list"></div>
+          <p id="specialist-note" class="store-note">Surveyor required. Auto Miners run without shovels or flags.</p>
         </section>
       </aside>
     </div>
