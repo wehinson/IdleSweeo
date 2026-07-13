@@ -2938,6 +2938,11 @@ function formatCurrency(value) {
   return `${BALANCE_CONFIG.currencySymbol}${Math.max(0, Math.floor(value))}`;
 }
 
+function grantDebugCoins() {
+  player.coins += 10000;
+  render();
+}
+
 function formatPercent(value, decimals = 0) {
   return `${(value * 100).toFixed(decimals)}%`;
 }
@@ -3008,6 +3013,12 @@ resetButton.addEventListener("click", () => {
   startGame();
 });
 resetProgressButton.addEventListener("click", resetProgress);
+window.addEventListener("keydown", (event) => {
+  if (event.shiftKey && event.key.toLowerCase() === "g") {
+    event.preventDefault();
+    grantDebugCoins();
+  }
+});
 window.addEventListener("beforeunload", saveMessageBoard);
 window.setInterval(tickMessageBoard, 1000);
 window.setInterval(tickAutoMiners, 1000);

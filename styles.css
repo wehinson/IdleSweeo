@@ -29,7 +29,7 @@ html {
 }
 
 body {
-  align-items: center;
+  align-items: flex-start;
   background:
     radial-gradient(circle at 50% 22%, rgba(255, 209, 102, 0.16), transparent 24rem),
     linear-gradient(135deg, #141921 0%, #1c2430 45%, #120f19 100%);
@@ -38,7 +38,7 @@ body {
   font-family: "Space Mono", Consolas, monospace;
   justify-content: flex-start;
   margin: 0;
-  overflow-x: auto;
+  overflow-x: hidden;
   padding: 20px;
   width: 100%;
 }
@@ -220,7 +220,7 @@ button {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   grid-template-rows: repeat(7, minmax(0, 1fr));
   margin: 0 auto;
-  max-height: min(48vh, 410px);
+  max-height: min(42vh, 360px);
   max-width: min(100%, 340px);
   width: 100%;
 }
@@ -2041,13 +2041,14 @@ select:disabled {
 @media (min-width: 1121px) {
   body {
     height: 100vh;
-    overflow-x: auto;
+    overflow-x: hidden;
     overflow-y: hidden;
   }
 
   .app-shell {
-    max-width: none;
-    min-width: max-content;
-    width: max-content;
+    flex-wrap: wrap;
+    max-width: 1280px;
+    min-width: 0;
+    width: min(100%, 1280px);
   }
 }
