@@ -1652,9 +1652,8 @@ function tickAutoMiners() {
 
   if (now - autoMinersState.lastWorkerTickAt >= 1000) {
     autoMinersState.lastWorkerTickAt = now;
-    runWorkerInitiative("agents");
-    runWorkerInitiative("specialists");
-    changed = true;
+    changed = runWorkerInitiative("agents") || changed;
+    changed = runWorkerInitiative("specialists") || changed;
   }
 
   if (currentMode === GAME_MODES.autoMiners && changed) {
@@ -1761,17 +1760,19 @@ function createQueuedField() {
 
 function runWorkerInitiative(group) {
   const order = autoMinersState.initiative[group] || [];
+  let changed = false;
   order.forEach((id) => {
     if (!fieldClearModalElement.hidden) return;
     const level = specialistLevel(id);
     if (id === "surveyor" || level <= 0) return;
-    for (let turn = 0; turn < level; turn += 1) runWorkerTurn(id);
+    for (let turn = 0; turn < level; turn += 1) changed = runWorkerTurn(id) || changed;
   });
+  return changed;
 }
 
 function runWorkerTurn(id) {
   const queueIndex = autoMinersState.workerFields[id] || 0;
-  if (queueIndex >= autoMinersState.queue.length) return;
+  if (queueIndex >= autoMinersState.queue.length) return false;
   const activeWasFirst = queueIndex === 0;
   const visibleState = createModeState();
   loadModeState(autoMinersState.queue[queueIndex]);
@@ -1788,13 +1789,14 @@ function runWorkerTurn(id) {
       resolveQueuedField(queueIndex, true);
       if (activeWasFirst) loadAutoActiveField();
       else loadModeState(visibleState);
-      return;
+      return true;
     }
   } else {
     autoMinersState.workerFields[id] = queueIndex + 1;
   }
   if (activeWasFirst) loadAutoActiveField();
   else loadModeState(visibleState);
+  return true;
 }
 
 function scanOrder(id) {
