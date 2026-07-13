@@ -2050,3 +2050,20 @@ select:disabled {
     width: max-content;
   }
 }
+
+@media (min-width: 701px) {
+  html {
+    overflow-x: auto;
+  }
+
+  body {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .app-shell {
+    flex-wrap: nowrap;
+    min-width: max-content;
+    width: max-content;
+  }
+}
