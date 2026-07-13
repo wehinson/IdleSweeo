@@ -57,9 +57,11 @@ const curioGridElement = document.querySelector("#curio-grid");
 const curioNoteElement = document.querySelector("#curio-note");
 const contractCountdownElement = document.querySelector("#contract-countdown");
 const challengeCountdownElement = document.querySelector("#challenge-countdown");
+const surveyorCountdownElement = document.querySelector("#surveyor-countdown");
 const messageBoardListElement = document.querySelector("#message-board-list");
 const generateContractButton = document.querySelector("#generate-contract");
 const generateChallengeButton = document.querySelector("#generate-challenge");
+const surveyNowButton = document.querySelector("#survey-now");
 const contractModalElement = document.querySelector("#contract-modal");
 const contractModalLabelElement = document.querySelector("#contract-modal-label");
 const contractModalTitleElement = document.querySelector("#contract-modal-title");
@@ -699,6 +701,7 @@ function startGame() {
 function render() {
   const isAutoMode = currentMode === GAME_MODES.autoMiners;
   boardElement.innerHTML = "";
+  updateSurveyorUI();
   if (isAutoMode && autoQueueView) {
     renderAutoQueueView();
     updateQuartermaster();
@@ -1627,7 +1630,10 @@ function createAutoMinersState() {
 }
 
 function tickAutoMiners() {
-  if (!autoMinersState) return;
+  if (!autoMinersState) {
+    updateSurveyorUI();
+    return;
+  }
   const now = performance.now();
   let changed = false;
   if (specialistLevel("surveyor") > 0
@@ -1649,6 +1655,39 @@ function tickAutoMiners() {
   if (currentMode === GAME_MODES.autoMiners && changed) {
     loadAutoActiveField();
     render();
+  }
+  updateSurveyorUI();
+}
+
+function updateSurveyorUI() {
+  if (!autoMinersState || specialistLevel("surveyor") <= 0) {
+    surveyorCountdownElement.textContent = "locked";
+    return;
+  }
+  if (autoMinersState.queue.length >= 5) {
+    surveyorCountdownElement.textContent = "queue full";
+    return;
+  }
+  const remaining = surveyorIntervalMs() - (performance.now() - autoMinersState.lastSurveyAt);
+  surveyorCountdownElement.textContent = formatClock(remaining);
+}
+
+function surveyNow() {
+  if (!autoMinersState) autoMinersState = createAutoMinersState();
+  if (autoMinersState.queue.length >= 5) {
+    statusElement.textContent = "Survey skipped: the Field Queue is full.";
+    render();
+    return;
+  }
+  if (currentMode === GAME_MODES.autoMiners) saveAutoActiveField();
+  autoMinersState.queue.push(createQueuedField());
+  autoMinersState.lastSurveyAt = performance.now();
+  autoMinersState.statusText = "Debug survey complete. A new field entered the queue.";
+  if (currentMode === GAME_MODES.autoMiners) {
+    loadAutoActiveField();
+    render();
+  } else {
+    updateSurveyorUI();
   }
 }
 
@@ -2940,6 +2979,7 @@ fieldQueueButton.addEventListener("click", switchToFieldQueue);
 autoMinersButton.addEventListener("click", switchToAutoMiners);
 generateContractButton.addEventListener("click", generateContractOffer);
 generateChallengeButton.addEventListener("click", generateChallengeOffer);
+surveyNowButton.addEventListener("click", surveyNow);
 contractModalStartButton.addEventListener("click", closeContractBriefing);
 resetButton.addEventListener("click", () => {
   if (currentMode === GAME_MODES.autoMiners) {

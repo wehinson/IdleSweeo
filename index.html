@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Mono:wght@400;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=worker-buttons-1" />
+    <link rel="stylesheet" href="styles.css?v=surveyor-debug-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -288,9 +288,14 @@
             <span class="message-board-status__label">Next challenge</span>
             <strong id="challenge-countdown" class="message-board-status__value">5:00</strong>
           </div>
+          <div class="message-board-status">
+            <span class="message-board-status__label">Next survey</span>
+            <strong id="surveyor-countdown" class="message-board-status__value">locked</strong>
+          </div>
           <div class="dev-buttons" aria-label="Developer message board controls">
             <button id="generate-contract" class="dev-button" type="button">Generate Contract</button>
             <button id="generate-challenge" class="dev-button" type="button">Generate Challenge</button>
+            <button id="survey-now" class="dev-button" type="button">Survey Now</button>
           </div>
         </fieldset>
 
@@ -352,6 +357,6 @@
     </div>
 
     <script src="config.js"></script>
-    <script src="game.js?v=worker-buttons-1"></script>
+    <script src="game.js?v=surveyor-debug-1"></script>
   </body>
 </html>
