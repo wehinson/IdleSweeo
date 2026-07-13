@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Mono:wght@400;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=auto-miners-fix-1" />
+    <link rel="stylesheet" href="styles.css?v=field-queue-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -197,23 +197,27 @@
           </div>
         </section>
 
-        <section id="specialists-panel" class="specialists-panel" aria-label="Auto Miner specialists" hidden>
+        <section id="specialists-panel" class="specialists-panel" aria-label="Auto Miner workers" hidden>
           <div class="panel-header">
             <span class="panel-header__eyebrow">Auto Mine Crew</span>
-            <h2>Specialists</h2>
+            <h2>Field Queue</h2>
           </div>
 
           <div class="auto-mine-status">
-            <span class="auto-mine-status__label">Queue Field</span>
-            <strong id="auto-mine-field" class="auto-mine-status__value">3×3</strong>
+            <span class="auto-mine-status__label">Queued Fields</span>
+            <strong id="auto-mine-field" class="auto-mine-status__value">0 / 5</strong>
           </div>
 
-          <button id="start-auto-mine" class="contract-button contract-button--large auto-mine-start" type="button">
-            Start Mine
-          </button>
+          <div class="worker-group">
+            <div class="store__subheader"><span class="store__eyebrow">Initiative</span><strong>Agents</strong></div>
+            <div id="agent-list" class="specialist-list" aria-label="Agent initiative"></div>
+          </div>
 
-          <div id="specialist-list" class="specialist-list"></div>
-          <p id="specialist-note" class="store-note">Surveyor required. Auto Miners run without shovels or flags.</p>
+          <div class="worker-group">
+            <div class="store__subheader"><span class="store__eyebrow">Initiative</span><strong>Specialists</strong></div>
+            <div id="specialist-list" class="specialist-list" aria-label="Specialist initiative"></div>
+          </div>
+          <p id="specialist-note" class="store-note">Hire a Surveyor to locate your first field.</p>
         </section>
       </aside>
 
@@ -339,6 +343,6 @@
     </div>
 
     <script src="config.js"></script>
-    <script src="game.js?v=auto-miners-fix-1"></script>
+    <script src="game.js?v=field-queue-1"></script>
   </body>
 </html>

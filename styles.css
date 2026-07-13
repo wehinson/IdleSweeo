@@ -1221,6 +1221,22 @@ body.is-contract-running .cabinet {
   gap: 8px;
 }
 
+.worker-group {
+  display: grid;
+  gap: 8px;
+}
+
+.queue-empty {
+  align-self: center;
+  color: rgba(216, 255, 232, 0.66);
+  font-family: "Press Start 2P", system-ui, sans-serif;
+  font-size: 0.62rem;
+  line-height: 1.7;
+  margin: auto;
+  padding: 24px;
+  text-align: center;
+}
+
 .specialist-card {
   background: #080d13;
   border: 2px solid rgba(216, 255, 232, 0.16);
@@ -1266,6 +1282,28 @@ body.is-contract-running .cabinet {
   font-size: 0.66rem;
   line-height: 1.35;
   margin: 0;
+}
+
+.worker-buy {
+  background: var(--yellow);
+  border: 2px solid #7d6617;
+  border-radius: 4px;
+  color: #17110a;
+  cursor: pointer;
+  font-family: "Press Start 2P", system-ui, sans-serif;
+  font-size: 0.46rem;
+  line-height: 1.25;
+  min-height: 30px;
+  padding: 6px 8px;
+}
+
+.worker-buy:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.specialist-card[draggable="true"] {
+  cursor: grab;
 }
 
 body.is-auto-miners .screen {
