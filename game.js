@@ -1909,7 +1909,7 @@ function renderSurveyorCard() {
   const cost = workerCost(worker);
   const affordable = player.coins >= cost;
   surveyorCardElement.innerHTML = `
-    <article class="specialist-card${level > 0 ? " is-active" : " is-locked"}">
+    <article class="specialist-card${level > 0 ? " is-active" : " is-available"}">
       <div class="specialist-card__topline"><strong>${worker.name}</strong><b>${level > 0 ? `LV ${level}` : "AVAILABLE"}</b></div>
       <p>${worker.task} Current schedule: ${formatClock(surveyorIntervalMs())}.</p>
       <button class="worker-buy" type="button" data-worker-buy="surveyor" ${affordable ? "" : "disabled"}>${formatWorkerCost(worker, cost)}</button>
@@ -1959,8 +1959,9 @@ function renderWorkerList(element, group) {
     const button = available
       ? `<button class="worker-buy" type="button" data-worker-buy="${specialist.id}" ${affordable ? "" : "disabled"}>${formatWorkerCost(specialist, cost)}</button>`
       : "";
+    const cardClass = level > 0 ? "is-active" : available ? "is-available" : "is-locked";
     return `
-      <article class="specialist-card${level > 0 ? " is-active" : " is-locked"}" draggable="true" data-worker-id="${specialist.id}">
+      <article class="specialist-card ${cardClass}" draggable="true" data-worker-id="${specialist.id}">
         <div class="specialist-card__topline">
           <strong>${specialist.name}</strong>
           <b>${status}</b>

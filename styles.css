@@ -1301,6 +1301,10 @@ body.is-contract-running .cabinet {
   border-color: rgba(46, 196, 182, 0.7);
 }
 
+.specialist-card.is-available {
+  opacity: 1;
+}
+
 .specialist-card.is-locked {
   opacity: 0.56;
 }
@@ -1336,7 +1340,7 @@ body.is-contract-running .cabinet {
 }
 
 .worker-buy {
-  background: var(--yellow);
+  background: linear-gradient(#fff1a8, #ffd166);
   border: 2px solid #7d6617;
   border-radius: 4px;
   color: #17110a;
@@ -1349,8 +1353,10 @@ body.is-contract-running .cabinet {
 }
 
 .worker-buy:disabled {
+  background: #3a4146;
+  border-color: #59616a;
+  color: rgba(247, 255, 247, 0.46);
   cursor: not-allowed;
-  opacity: 0.42;
 }
 
 .specialist-card[draggable="true"] {
