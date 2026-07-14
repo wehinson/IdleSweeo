@@ -1934,6 +1934,13 @@ select:disabled {
   position: relative;
 }
 
+.cabinet {
+  max-height: calc(100vh - 40px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-color: var(--cyan) #080d13;
+}
+
 .quartermaster-panel {
   max-height: calc(100vh - 40px);
   overflow-x: hidden;

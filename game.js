@@ -1588,17 +1588,29 @@ function resetProgress() {
 }
 
 function switchToFieldQueue() {
+  if (currentMode === GAME_MODES.fieldQueue) return;
+  saveCurrentModeState();
+  currentMode = GAME_MODES.fieldQueue;
+  autoQueueView = false;
+  document.body.classList.remove("is-auto-miners");
+  if (fieldQueueState) loadModeState(fieldQueueState);
+  render();
+}
+
+function showAutoQueueList() {
   if (currentMode === GAME_MODES.autoMiners) {
+    if (autoQueueView) return;
     saveAutoActiveField();
     autoQueueView = true;
     render();
     return;
   }
-  if (currentMode === GAME_MODES.fieldQueue) return;
   saveCurrentModeState();
-  currentMode = GAME_MODES.fieldQueue;
-  document.body.classList.remove("is-auto-miners");
-  if (fieldQueueState) loadModeState(fieldQueueState);
+  currentMode = GAME_MODES.autoMiners;
+  document.body.classList.add("is-auto-miners");
+  if (!autoMinersState) autoMinersState = createAutoMinersState();
+  autoQueueView = true;
+  resetButton.textContent = "BACK";
   render();
 }
 
@@ -2992,7 +3004,7 @@ messageBoardListElement.addEventListener("click", (event) => {
   const button = event.target.closest(".js-start-contract");
   if (button) acceptOfferedContract(button.dataset.contractId);
 });
-fieldQueueButton.addEventListener("click", switchToFieldQueue);
+fieldQueueButton.addEventListener("click", showAutoQueueList);
 autoMinersButton.addEventListener("click", switchToAutoMiners);
 generateContractButton.addEventListener("click", generateContractOffer);
 generateChallengeButton.addEventListener("click", generateChallengeOffer);
