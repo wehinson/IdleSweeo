@@ -883,9 +883,13 @@ function openCell(index) {
     return;
   }
 
+  // A manual dig costs one durability, regardless of how many tiles its
+  // cascade reveals. Chording passes consumeDurability: false below, so it
+  // never adds a cost for any of its revealed tiles.
+  consumeShovel();
   isRevealing = true;
   const currentRevealToken = ++revealToken;
-  revealGradually(cell, currentRevealToken).then((revealCompleted) => {
+  revealGradually(cell, currentRevealToken, { consumeDurability: false }).then((revealCompleted) => {
     if (currentRevealToken !== revealToken) return;
 
     isRevealing = false;
@@ -907,7 +911,7 @@ function openCell(index) {
   });
 }
 
-function revealGradually(startCell, token, { consumeDurability = true } = {}) {
+function revealGradually(startCell, token, { consumeDurability = false } = {}) {
   const waves = revealWavesFrom(startCell);
 
   return (async () => {
@@ -2285,14 +2289,26 @@ function updateProgressionUI() {
 
   const safetyCost = BALANCE_CONFIG.abilities.safetyRadiusCosts[player.safetyRadius];
   const safetyFitsCurrentBoard = maxMineCount(player.safetyRadius + 1) >= 1;
-  showProgression(abilityElements.safetyRadius, player.safetyRadius < 5 && safetyFitsCurrentBoard, progressionLocked || player.coins < safetyCost);
+  showProgression(
+    abilityElements.safetyRadius,
+    true,
+    progressionLocked || player.safetyRadius >= 5 || !safetyFitsCurrentBoard || player.coins < safetyCost,
+  );
   abilityElements.safetyRadiusCost.textContent = player.safetyRadius < 5 ? formatCurrency(safetyCost) : "MAX";
-  abilityElements.safetyRadiusDetail.textContent = player.safetyRadius < 5 ? `Radius ${player.safetyRadius} → ${player.safetyRadius + 1}; no mine near first click` : formatMessage("safetyMax");
+  abilityElements.safetyRadiusDetail.textContent = player.safetyRadius >= 5
+    ? formatMessage("safetyMax")
+    : !safetyFitsCurrentBoard
+      ? "Unlock: expand the board beyond 3×3."
+      : `Radius ${player.safetyRadius} → ${player.safetyRadius + 1}; no mine near first click`;
 
   const chordingVisible = player.shovelTier >= 3;
-  showProgression(abilityElements.chording, chordingVisible, progressionLocked || (!player.chordingUnlocked && player.mines < BALANCE_CONFIG.abilities.chordingMineCost));
+  showProgression(abilityElements.chording, true, progressionLocked || !chordingVisible || (!player.chordingUnlocked && player.mines < BALANCE_CONFIG.abilities.chordingMineCost));
   abilityElements.chordingTitle.textContent = player.chordingUnlocked ? "Chording ready" : "Unlock Chording";
-  abilityElements.chordingDetail.textContent = player.chordingUnlocked ? formatMessage("chordingReady") : formatMessage("chordingDescription");
+  abilityElements.chordingDetail.textContent = player.chordingUnlocked
+    ? formatMessage("chordingReady")
+    : !chordingVisible
+      ? "Unlock: upgrade to a Steel Shovel."
+      : formatMessage("chordingDescription");
   abilityElements.chordingCost.textContent = player.chordingUnlocked ? "READY" : `${BALANCE_CONFIG.abilities.chordingMineCost} mines`;
 }
 
