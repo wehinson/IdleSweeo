@@ -279,6 +279,155 @@ button {
   animation: tile-reveal 220ms ease-out both;
 }
 
+/* District and Parcel expansion */
+.cell.has-entrance {
+  overflow: visible;
+  z-index: 2;
+}
+
+.cell.has-entrance::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(135deg, #ffd166, #8c5e2f 60%, #312215);
+  box-shadow: 0 0 12px rgba(255, 209, 102, 0.75), inset 0 0 0 2px rgba(40, 25, 12, 0.8);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.cell.has-entrance.is-entrance-revealed::after { opacity: 1; }
+.cell.entrance-top::after { left: 6%; right: 6%; top: -12px; height: 16px; transform: perspective(20px) rotateX(-20deg); }
+.cell.entrance-bottom::after { left: 6%; right: 6%; bottom: -12px; height: 16px; transform: perspective(20px) rotateX(20deg); }
+.cell.entrance-left::after { top: 6%; bottom: 6%; left: -12px; width: 16px; transform: perspective(20px) rotateY(20deg); }
+.cell.entrance-right::after { top: 6%; bottom: 6%; right: -12px; width: 16px; transform: perspective(20px) rotateY(-20deg); }
+
+.cell.is-curio {
+  color: #9b5de5;
+  text-shadow: 0 0 8px rgba(155, 93, 229, 0.9);
+}
+
+.message-tile--contract.is-priority {
+  border-color: #ffd166;
+  box-shadow: 0 0 0 2px rgba(255, 209, 102, 0.22), 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.district-view {
+  min-height: 420px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(210px, 0.42fr);
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+  padding: 12px;
+  color: #2b2117;
+  background:
+    radial-gradient(circle at 25% 30%, rgba(92, 65, 35, 0.09) 0 2px, transparent 3px),
+    linear-gradient(135deg, #d7bd82, #b79458);
+  box-shadow: inset 0 0 30px rgba(50, 31, 14, 0.35);
+}
+
+.district-locked {
+  grid-column: 1 / -1;
+  align-self: center;
+  justify-self: center;
+  max-width: 520px;
+  padding: 36px;
+  text-align: center;
+  border: 2px dashed rgba(58, 41, 24, 0.5);
+  background: rgba(255, 244, 211, 0.45);
+}
+
+.district-map__eyebrow {
+  font-family: "Press Start 2P", monospace;
+  font-size: 0.55rem;
+  text-transform: uppercase;
+}
+
+.district-toolbar {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+
+.district-toolbar button,
+.parcel-action {
+  border: 1px solid #3d2d1e;
+  border-radius: 4px;
+  padding: 7px 10px;
+  color: #24190e;
+  background: linear-gradient(#ffe7a5, #d9b866);
+  font: 700 0.66rem "Space Mono", monospace;
+  cursor: pointer;
+}
+
+.district-toolbar button:disabled,
+.parcel-action:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.district-map {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--district-cols), minmax(48px, 1fr));
+  grid-template-rows: repeat(var(--district-rows), minmax(38px, 1fr));
+  gap: 5px;
+  padding: 8px;
+  overflow: auto;
+  border: 2px solid rgba(53, 37, 21, 0.55);
+  background: rgba(75, 60, 44, 0.22);
+}
+
+.district-cell {
+  position: relative;
+  min-width: 48px;
+  min-height: 38px;
+  padding: 4px;
+  overflow: visible;
+  border: 1px solid rgba(55, 38, 21, 0.6);
+  border-radius: 3px;
+  color: #271b10;
+  background: #d8c08c;
+  font: 0.55rem "Space Mono", monospace;
+  cursor: pointer;
+}
+
+.district-cell strong,
+.district-cell span { display: block; }
+.district-cell span { margin-top: 3px; font-size: 0.48rem; opacity: 0.72; }
+.district-cell.is-empty { opacity: 0.2; cursor: default; background: #6c6b66; }
+.district-cell.state-unknown { color: #d7d7d2; background: #5c5c58; }
+.district-cell.state-active { background: #f1ce64; }
+.district-cell.state-caved_in { color: #fff; background: #8c352f; }
+.district-cell.state-secured { background: #85b76e; }
+.district-cell.is-selected { outline: 3px solid #e94f37; outline-offset: 1px; }
+
+.passage-mark { position: absolute; display: block; background: #3e2a18; }
+.passage-mark.is-north { width: 7px; height: 8px; left: calc(50% - 3px); top: -8px; }
+.passage-mark.is-south { width: 7px; height: 8px; left: calc(50% - 3px); bottom: -8px; }
+.passage-mark.is-east { width: 8px; height: 7px; top: calc(50% - 3px); right: -8px; }
+.passage-mark.is-west { width: 8px; height: 7px; top: calc(50% - 3px); left: -8px; }
+
+.parcel-inspector {
+  min-width: 0;
+  padding: 12px;
+  overflow: auto;
+  border: 2px solid rgba(53, 37, 21, 0.55);
+  background: rgba(255, 244, 211, 0.6);
+  font: 0.72rem "Space Mono", monospace;
+}
+
+.parcel-inspector h2 { margin: 0 0 10px; font-size: 0.9rem; }
+.parcel-action { width: 100%; margin-top: 7px; }
+.parcel-warning { color: #811f1f; font-weight: 700; }
+.parcel-placeholder { padding-top: 8px; border-top: 1px dashed #6d4f30; }
+.survey-report { margin: 0; }
+.survey-report div { display: grid; grid-template-columns: 82px 1fr; gap: 6px; margin: 5px 0; }
+.survey-report dt { font-weight: 700; }
+.survey-report dd { margin: 0; }
+
+@media (max-width: 780px) {
+  .district-view { grid-template-columns: 1fr; }
+  .parcel-inspector { max-height: 260px; }
+}
+
 .cell.is-worker-cursor {
   box-shadow: inset 0 0 0 3px var(--yellow), 0 0 12px rgba(255, 209, 102, 0.76);
 }
@@ -1308,68 +1457,6 @@ body.is-contract-running .cabinet {
 .worker-group {
   display: grid;
   gap: 8px;
-}
-
-.queue-empty {
-  align-self: center;
-  color: rgba(216, 255, 232, 0.66);
-  font-family: "Press Start 2P", system-ui, sans-serif;
-  font-size: 0.62rem;
-  line-height: 1.7;
-  margin: auto;
-  padding: 24px;
-  text-align: center;
-}
-
-.auto-queue-list {
-  align-content: start;
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  height: 100%;
-  overflow: auto;
-  padding: 12px;
-}
-
-.queued-field-card {
-  align-content: start;
-  background: #080d13;
-  border: 2px solid rgba(216, 255, 232, 0.16);
-  border-radius: 5px;
-  display: grid;
-  gap: 8px;
-  min-height: 94px;
-  padding: 12px;
-}
-
-.queued-field-card.is-front {
-  border-color: rgba(46, 196, 182, 0.82);
-}
-
-.queued-field-card__topline {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-  justify-content: space-between;
-}
-
-.queued-field-card strong,
-.queued-field-card b {
-  color: var(--screen-glow);
-  font-family: "Press Start 2P", system-ui, sans-serif;
-  font-size: 0.52rem;
-  line-height: 1.35;
-}
-
-.queued-field-card b {
-  color: var(--yellow);
-}
-
-.queued-field-card p {
-  color: rgba(247, 255, 247, 0.68);
-  font-size: 0.66rem;
-  line-height: 1.45;
-  margin: 0;
 }
 
 .specialist-card {

@@ -1,5 +1,6 @@
 export const GAME_MODES = Object.freeze({
-  fieldQueue: "fieldQueue",
+  board: "board",
+  district: "district",
 });
 
 export const SPECIAL_EQUIPMENT = Object.freeze([
@@ -11,7 +12,7 @@ export const SPECIAL_EQUIPMENT = Object.freeze([
 ]);
 
 export const SPECIALISTS = Object.freeze([
-  { id: "surveyor", name: "Surveyor", group: "queue", currency: "coins", baseCost: 100, task: "Finds a field on a timer and opens its first safe area. Level 10 opens 3x3; level 20 opens 5x5." },
+  { id: "surveyor", name: "Surveyor", group: "district", currency: "coins", baseCost: 100, task: "Before District unlock, enlarges the guaranteed-safe opening. After unlock, surveys one Unknown Parcel at a time." },
   { id: "excavator", name: "Excavator", group: "agents", currency: "coins", baseCost: 150, task: "From top-left, opens one tile beside a number already touching enough flags." },
   { id: "flagbearer", name: "Flagbearer", group: "agents", currency: "coins", baseCost: 180, task: "From bottom-left, places one certain flag when all remaining neighbors must be mines." },
   { id: "depthAnalyst", name: "Depth Analyst", group: "specialists", currency: "mines", baseCost: 5, task: "Looks for safe chording opportunities from the bottom-right." },

@@ -34,12 +34,12 @@ export function restartDeveloperRun(telemetry, context, now = Date.now()) {
   const runNumber = telemetry.nextRunNumber;
   telemetry.nextRunNumber += 1;
   telemetry.currentRun = {
-    id: `field-queue-${runNumber}`,
+    id: `board-${runNumber}`,
     runNumber,
     startedAtEpochMs: now,
     endedAtEpochMs: null,
     durationMs: null,
-    mode: "fieldQueue",
+    mode: "board",
     board: {
       rows: context.rows,
       cols: context.cols,

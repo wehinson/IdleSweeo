@@ -150,6 +150,52 @@ const SWEEPER_INC_CONFIG = {
     ],
   },
 
+  campDiscovery: {
+    firstEligibleAttempt: 100,
+    retryMinimum: 25,
+    retryMaximum: 75,
+    debugDelay: 5,
+    entranceWidths: [2, 3],
+    contract: {
+      id: "establishCamp",
+      name: "Establish a Camp",
+      description: "You’ve come across a flat shelf in the granite. This seems like a good place to establish a camp, but clearing the mines may be difficult.",
+      rows: 10,
+      cols: 15,
+      mines: 30,
+      treasureCount: 1,
+    },
+  },
+
+  district: {
+    initialViewportWidth: 9,
+    initialViewportHeight: 9,
+    defaultSurveyDurationMs: 60000,
+    recovery: { digCost: 500, baseDurationMs: 300000 },
+    clearance: {
+      preparation: { id: "preparation", name: "Extra preparation", digCost: 200, baseDurationMs: 120000 },
+      flooding: { id: "flooding", name: "Flooding", digCost: 300, baseDurationMs: 180000 },
+      collapsed: { id: "collapsed", name: "Collapsed access", digCost: 400, baseDurationMs: 240000 },
+    },
+    passageGeneration: {
+      chances: [0.9, 0.6, 0.3],
+      blockedSidePenalty: 0.3,
+      directionOrder: ["north", "east", "south", "west"],
+    },
+    parcelTypes: [
+      { id: "abandonedQuarry", displayName: "Abandoned Quarry", weight: 14, width: [12, 18], height: [10, 14], mineDensity: [0.12, 0.18], treasure: [2, 4], curios: [0, 1], hazards: ["Loose ground"], blocker: { type: "preparation", chance: 0.2 } },
+      { id: "ironSeam", displayName: "Iron Seam", weight: 16, width: [12, 18], height: [8, 12], mineDensity: [0.15, 0.21], treasure: [1, 3], curios: [0, 1], hazards: [], blocker: { type: "preparation", chance: 0.1 } },
+      { id: "collapsedTunnel", displayName: "Collapsed Tunnel", weight: 10, width: [14, 22], height: [6, 9], mineDensity: [0.18, 0.24], treasure: [1, 3], curios: [0, 1], hazards: ["Unstable entrance"], blocker: { type: "collapsed", chance: 0.5 } },
+      { id: "crystalChamber", displayName: "Crystal Chamber", weight: 8, width: [10, 16], height: [10, 16], mineDensity: [0.16, 0.22], treasure: [3, 6], curios: [1, 2], hazards: [], blocker: null },
+      { id: "oldMilitaryArsenal", displayName: "Old Military Arsenal", weight: 5, width: [14, 22], height: [12, 18], mineDensity: [0.22, 0.28], treasure: [3, 5], curios: [0, 2], hazards: ["Military debris"], blocker: { type: "preparation", chance: 0.2 } },
+      { id: "goldVein", displayName: "Gold Vein", weight: 6, width: [12, 20], height: [8, 12], mineDensity: [0.18, 0.24], treasure: [4, 7], curios: [0, 1], hazards: [], blocker: null },
+      { id: "unstableFault", displayName: "Unstable Fault", weight: 7, width: [8, 12], height: [12, 20], mineDensity: [0.24, 0.3], treasure: [1, 3], curios: [0, 1], hazards: ["Structural fault"], blocker: { type: "collapsed", chance: 0.25 } },
+      { id: "looseSediment", displayName: "Loose Sediment", weight: 14, width: [10, 16], height: [8, 14], mineDensity: [0.1, 0.16], treasure: [1, 3], curios: [0, 1], hazards: ["Loose ground"], blocker: { type: "preparation", chance: 0.35 } },
+      { id: "bedrock", displayName: "Bedrock", weight: 12, width: [10, 18], height: [10, 16], mineDensity: [0.14, 0.2], treasure: [1, 2], curios: [0, 1], hazards: [], blocker: null },
+      { id: "floodedPocket", displayName: "Flooded Pocket", weight: 8, width: [10, 18], height: [8, 14], mineDensity: [0.13, 0.2], treasure: [2, 4], curios: [0, 1], hazards: ["Flooding"], blocker: { type: "flooding", chance: 0.6 } },
+    ],
+  },
+
   messageBoard: {
     challenges: {
       maxActive: 4,

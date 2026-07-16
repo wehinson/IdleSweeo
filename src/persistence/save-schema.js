@@ -1,8 +1,11 @@
 import config from "../../config.js";
 import { SPECIAL_EQUIPMENT, SPECIALISTS } from "../engine/catalogs.js";
+import { createCampProgression } from "../engine/camp-progression.js";
+import { validateDistrict } from "../engine/district.js";
+import { createWorkerState } from "../engine/workers.js";
 
 export const SAVE_FORMAT = "idle-sweep-save";
-export const SAVE_SCHEMA_VERSION = 1;
+export const SAVE_SCHEMA_VERSION = 2;
 
 export function serializeSave(state, now = () => new Date()) {
   const document = {
@@ -21,6 +24,7 @@ export function migrateSave(document) {
   }
   if (document.format !== SAVE_FORMAT) throw new Error("This is not an Idle Sweep save file.");
   if (document.schemaVersion > SAVE_SCHEMA_VERSION) throw new Error("This save was created by a newer game version.");
+  if (document.schemaVersion === 1) return migrateVersionOne(document);
   if (document.schemaVersion !== SAVE_SCHEMA_VERSION) throw new Error("This save version is not supported.");
   return document;
 }
@@ -34,13 +38,18 @@ export function validateSave(input) {
   assertPlainObject(state.messageBoard, "state.messageBoard");
   assertPlainObject(state.timers, "state.timers");
   if (state.developerTelemetry !== undefined) validateDeveloperTelemetry(state.developerTelemetry);
-  if (!new Set(["fieldQueue", "autoMiners"]).has(state.currentMode)) throw new Error("The save contains an invalid game mode.");
+  if (!new Set(["board", "district"]).has(state.currentMode)) throw new Error("The save contains an invalid game mode.");
   validateSettings(state.settings, "state.settings");
   if (state.fieldQueue !== null) validateModeState(state.fieldQueue, "state.fieldQueue");
   if (state.autoMiners !== null) validateAutoMiners(state.autoMiners);
   if (!Array.isArray(state.messageBoard.challenges)) throw new Error("The message board challenge list is invalid.");
   validatePlayer(state.player);
   validateMessageBoard(state.messageBoard);
+  if (state.campProgression !== undefined) validateCampProgression(state.campProgression);
+  if (state.workerState !== undefined) validateWorkerState(state.workerState);
+  if (state.district !== undefined && state.district !== null) validateDistrict(state.district);
+  if (state.boardSessions !== undefined) validateBoardSessions(state.boardSessions);
+  if (state.contractInstances !== undefined) validateContractInstances(state.contractInstances, state.boardSessions || {});
   assertFiniteNonNegative(state.messageBoard.nextChallengeInMs, "next challenge timer");
   assertJsonValue(state, "state");
   return document;
@@ -55,6 +64,126 @@ function validateDeveloperTelemetry(telemetry) {
   telemetry.completedRuns.forEach((run, index) => validateDeveloperRun(run, `state.developerTelemetry.completedRuns[${index}]`));
   if (telemetry.currentRun !== null) validateDeveloperRun(telemetry.currentRun, "state.developerTelemetry.currentRun");
   (telemetry.actions || []).forEach((action, index) => validateDeveloperAction(action, `state.developerTelemetry.actions[${index}]`));
+}
+
+function migrateVersionOne(document) {
+  const state = structuredCloneSafe(document.state);
+  const mainBoardId = "main-board";
+  const mainMode = state.fieldQueue || null;
+  const activeContractId = state.player?.contracts?.active?.id || null;
+  const migratedContractInstanceId = activeContractId ? `contract-${activeContractId}-migrated` : null;
+  state.schemaMigrationNotice = state.autoMiners?.queue?.length
+    ? "Queued Field boards were retired when Districts replaced Field Queue. Your visible board, workers, and resources were preserved."
+    : null;
+  state.currentMode = "board";
+  state.currentView = "board";
+  state.currentBoardId = mainBoardId;
+  state.boardSessions = mainMode ? {
+    [mainBoardId]: {
+      id: mainBoardId,
+      category: activeContractId ? "STANDARD_CONTRACT" : "STANDARD",
+      owner: activeContractId ? { type: "contract", id: activeContractId } : { type: "main", id: "main" },
+      seed: `migrated:${document.exportedAt || "v1"}`,
+      settings: { ...mainMode.settings },
+      status: legacyBoardStatus(mainMode),
+      modeState: mainMode,
+      entrances: [],
+      campDiscovery: false,
+      contractInstanceId: migratedContractInstanceId,
+      parcelId: null,
+      digBudget: null,
+      createdOrdinal: 0,
+    },
+  } : {};
+  state.campProgression = createCampProgression(config.campDiscovery);
+  state.district = null;
+  state.workerState = createWorkerState(SPECIALISTS, state.player?.specialists || {});
+  state.contractInstances = {};
+  state.nextBoardOrdinal = 1;
+  state.nextContractInstanceOrdinal = 1;
+  if (activeContractId && mainMode) {
+    state.contractInstances[migratedContractInstanceId] = {
+      id: migratedContractInstanceId,
+      typeId: activeContractId,
+      boardId: mainBoardId,
+      status: "ACCEPTED",
+      special: false,
+    };
+  }
+  state.autoMiners = state.autoMiners ? {
+    ...state.autoMiners,
+    workerTasks: {},
+    workerTargets: Object.fromEntries(Object.keys(state.workerState.workersById).map((workerId) => [workerId, null])),
+  } : null;
+  if (state.autoMiners) {
+    delete state.autoMiners.queue;
+    delete state.autoMiners.workerFields;
+  }
+  state.fieldQueue = mainMode;
+  return { ...document, schemaVersion: 2, state };
+}
+
+function legacyBoardStatus(mode) {
+  if (!mode.roundStarted) return "PREVIEW";
+  if (!mode.roundResolved && !mode.gameOver) return "COMMITTED";
+  if (mode.board.some((cell) => cell.mine && cell.open)) return "LOST";
+  if (mode.board.every((cell) => cell.mine || cell.open)) return "WON";
+  return "LOST";
+}
+
+function validateCampProgression(progression) {
+  assertPlainObject(progression, "state.campProgression");
+  if (!new Set(["LOCKED_COUNTDOWN", "CAMP_DISCOVERY_ACTIVE", "CAMP_CONTRACT_AVAILABLE", "CAMP_ATTEMPT_ACTIVE", "DISTRICT_UNLOCKED"]).has(progression.phase)) {
+    throw new Error("The Camp progression phase is invalid.");
+  }
+  assertFiniteNonNegative(progression.eligibleAttemptCount, "Camp eligible attempt count");
+  assertFiniteNonNegative(progression.failureCount, "Camp failure count");
+  if (progression.nextCampDiscoveryAt !== null) assertFiniteNonNegative(progression.nextCampDiscoveryAt, "next Camp discovery target");
+}
+
+function validateWorkerState(workerState) {
+  assertPlainObject(workerState, "state.workerState");
+  assertPlainObject(workerState.workerTypes, "state.workerState.workerTypes");
+  assertPlainObject(workerState.workersById, "state.workerState.workersById");
+  const specialistIds = new Set(SPECIALISTS.map((item) => item.id));
+  for (const [id, worker] of Object.entries(workerState.workersById)) {
+    assertPlainObject(worker, `state.workerState.workersById.${id}`);
+    if (!specialistIds.has(worker.typeId)) throw new Error(`Unknown worker type: ${worker.typeId}`);
+    if (!new Set(["AVAILABLE", "ASSIGNED"]).has(worker.status)) throw new Error(`Invalid worker status: ${worker.status}`);
+  }
+}
+
+function validateBoardSessions(boardSessions) {
+  assertPlainObject(boardSessions, "state.boardSessions");
+  const categories = new Set(["STANDARD", "STANDARD_CONTRACT", "CAMP_CONTRACT", "DISTRICT_PARCEL", "DEV_TEST"]);
+  const statuses = new Set(["PREVIEW", "COMMITTED", "WON", "LOST"]);
+  for (const [id, session] of Object.entries(boardSessions)) {
+    assertPlainObject(session, `state.boardSessions.${id}`);
+    if (session.id !== id) throw new Error(`Board session key does not match its id: ${id}`);
+    if (!categories.has(session.category)) throw new Error(`Unknown board category: ${session.category}`);
+    if (!statuses.has(session.status)) throw new Error(`Unknown board status: ${session.status}`);
+    assertPlainObject(session.owner, `state.boardSessions.${id}.owner`);
+    validateSettings(session.settings, `state.boardSessions.${id}.settings`);
+    if (session.modeState !== null) validateModeState(session.modeState, `state.boardSessions.${id}.modeState`);
+  }
+}
+
+function validateContractInstances(instances, boardSessions) {
+  assertPlainObject(instances, "state.contractInstances");
+  const typeIds = new Set([...config.contracts.types.map((type) => type.id), config.campDiscovery.contract.id]);
+  const statuses = new Set(["ACCEPTED", "COMPLETED", "FAILED"]);
+  const acceptedTypes = new Set();
+  for (const [id, instance] of Object.entries(instances)) {
+    assertPlainObject(instance, `state.contractInstances.${id}`);
+    if (instance.id !== id || !typeIds.has(instance.typeId) || !statuses.has(instance.status)) {
+      throw new Error(`Invalid Contract instance: ${id}`);
+    }
+    if (!boardSessions[instance.boardId]) throw new Error(`Contract instance ${id} references a missing board.`);
+    if (instance.status === "ACCEPTED") {
+      if (acceptedTypes.has(instance.typeId)) throw new Error(`Duplicate accepted Contract type: ${instance.typeId}`);
+      acceptedTypes.add(instance.typeId);
+    }
+  }
 }
 
 function validateDeveloperAction(action, path) {
@@ -129,14 +258,14 @@ export function hydrateSave(input) {
 
 function validateAutoMiners(autoMiners) {
   assertPlainObject(autoMiners, "state.autoMiners");
-  if (!Array.isArray(autoMiners.queue) || autoMiners.queue.length > 5) throw new Error("The Auto Miner queue is invalid.");
-  autoMiners.queue.forEach((field, index) => validateModeState(field, `state.autoMiners.queue[${index}]`));
-  assertPlainObject(autoMiners.workerFields, "state.autoMiners.workerFields");
+  if (autoMiners.queue !== undefined && (!Array.isArray(autoMiners.queue) || autoMiners.queue.length > 0)) throw new Error("Retired queued boards cannot appear in a v2 save.");
+  assertPlainObject(autoMiners.workerTargets || {}, "state.autoMiners.workerTargets");
   assertPlainObject(autoMiners.initiative, "state.autoMiners.initiative");
   const specialistIds = new Set(SPECIALISTS.map((item) => item.id));
-  Object.entries(autoMiners.workerFields).forEach(([id, fieldIndex]) => {
-    if (!specialistIds.has(id)) throw new Error(`Unknown Auto Miner specialist id: ${id}`);
-    if (!Number.isInteger(fieldIndex) || fieldIndex < -1) throw new Error(`Auto Miner field index for ${id} is invalid.`);
+  Object.entries(autoMiners.workerTargets || {}).forEach(([id, targetId]) => {
+    const instanceType = id.replace(/-\d+$/, "");
+    if (!specialistIds.has(id) && !specialistIds.has(instanceType)) throw new Error(`Unknown Auto Miner specialist id: ${id}`);
+    if (targetId !== null && typeof targetId !== "string") throw new Error(`Auto Miner target for ${id} is invalid.`);
   });
   for (const group of ["agents", "specialists"]) {
     if (!Array.isArray(autoMiners.initiative[group]) || autoMiners.initiative[group].some((id) => !specialistIds.has(id))) {
@@ -165,6 +294,12 @@ function validateModeState(mode, path) {
     throw new Error(`${path} has an invalid board size.`);
   }
   mode.board.forEach((cell, index) => {
+    if (mode.boardEncoding === 1) {
+      if (!Array.isArray(cell) || cell.length !== 4 || cell.some((value) => !Number.isFinite(value))) {
+        throw new Error(`${path} has invalid compact cell data at ${index}.`);
+      }
+      return;
+    }
     assertPlainObject(cell, `${path}.board[${index}]`);
     if (cell.index !== index) throw new Error(`${path} has invalid cell indexes.`);
   });

@@ -2,6 +2,7 @@ import { hydrateSave, serializeSave, validateSave } from "./save-schema.js";
 
 export const SAVE_STORAGE_KEY = "idle-sweeper.save.v1";
 export const LEGACY_MESSAGE_BOARD_KEY = "idle-sweeper.message-board.v1";
+export const SAVE_WARNING_BYTES = 4 * 1024 * 1024;
 
 export function loadStoredSave(storage = window.localStorage) {
   const raw = storage.getItem(SAVE_STORAGE_KEY);
@@ -10,7 +11,9 @@ export function loadStoredSave(storage = window.localStorage) {
 }
 
 export function storeSave(state, storage = window.localStorage) {
-  storage.setItem(SAVE_STORAGE_KEY, serializeSave(state));
+  const serialized = serializeSave(state);
+  if (serialized.length >= SAVE_WARNING_BYTES) console.warn(`Idle Sweep save is ${serialized.length.toLocaleString()} bytes.`);
+  storage.setItem(SAVE_STORAGE_KEY, serialized);
 }
 
 export function clearStoredSaves(storage = window.localStorage) {

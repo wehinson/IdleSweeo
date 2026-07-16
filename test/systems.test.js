@@ -28,7 +28,7 @@ test("Auto Miner state and costs are deterministic", () => {
   const state = createAutoMinerState(specialists, 250);
   assert.equal(state.lastSurveyAt, 250);
   assert.equal(state.automationMode, "manual");
-  assert.equal(state.workerFields.excavator, -1);
+  assert.equal(state.workerTargets.excavator, null);
   assert.equal(state.workerPolicies.excavator, "focus");
   assert.deepEqual(state.initiative.specialists, ["analyst"]);
   assert.equal(workerCost(specialists[0], 1), 160);
