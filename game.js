@@ -2968,6 +2968,7 @@ function formatCurrency(value) {
 
 function grantDebugCoins() {
   player.coins += 10000;
+  player.mines += 5;
   render();
 }
 
