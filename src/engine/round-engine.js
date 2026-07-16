@@ -1,4 +1,5 @@
 import { createBoardCells, getNeighbors, hasClearedBoard, updateBoardAdjacency } from "./board.js";
+import { refreshProofMetadata } from "./proofs.js";
 import { createGame } from "./game-engine.js";
 import { createStartingStats } from "./player.js";
 
@@ -96,6 +97,7 @@ export function createRoundState(options = {}) {
       if (board[index]) board[index].mine = true;
     });
     updateBoardAdjacency(board, settings);
+    refreshProofMetadata(board, settings);
   }
   (options.treasures || []).forEach(({ index, value }) => {
     if (!board[index] || board[index].mine) return;
@@ -154,6 +156,7 @@ export function createRoundState(options = {}) {
 
 export function createRoundEngine(options = {}) {
   const initialState = options.initialState ? clone(options.initialState) : createRoundState(options);
+  refreshProofMetadata(initialState.board, initialState.settings);
   return createGame({
     config: options.config || {},
     initialState,
@@ -173,6 +176,7 @@ export function reduceRoundState(state, action, services) {
   else if (action.type === "round/equipment") useEquipment(next, action.id, action.index, effects);
   else if (action.type === "round/reset") return { state: resetRound(next), effects: [{ type: "roundReset" }] };
   else return state;
+  refreshProofMetadata(next.board, next.settings);
   return { state: next, effects };
 }
 

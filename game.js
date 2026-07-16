@@ -1,7 +1,15 @@
 import GAME_CONFIG from "./config.js";
 import { createGame } from "./src/engine/game-engine.js";
 import { createBoardCells, getNeighbors, hasClearedBoard, updateBoardAdjacency } from "./src/engine/board.js";
-import { GAME_MODES, SPECIAL_EQUIPMENT, SPECIAL_EQUIPMENT_BY_ID, SPECIALISTS } from "./src/engine/catalogs.js";
+import { availableProofs, refreshProofMetadata, scoreProofCascade } from "./src/engine/proofs.js";
+import { performPurchase } from "./src/engine/purchaseables.js";
+import {
+  GAME_MODES,
+  SPECIAL_EQUIPMENT,
+  SPECIAL_EQUIPMENT_BY_ID,
+  SPECIALISTS,
+  STORE_PURCHASEABLE_BY_ID,
+} from "./src/engine/catalogs.js";
 import {
   clamp as clampValue,
   exponentialCost as calculateExponentialCost,
@@ -36,6 +44,7 @@ import {
 import {
   createDeveloperTelemetry,
   hydrateDeveloperTelemetry,
+  recordDeveloperAction,
   recordDeveloperEvent,
   resolveDeveloperRun,
   restartDeveloperRun,
@@ -60,6 +69,8 @@ const COPY_CONFIG = GAME_CONFIG.copy;
 const CONTRACT_CONFIG = GAME_CONFIG.contracts;
 const MESSAGE_BOARD_CONFIG = GAME_CONFIG.messageBoard;
 const CHALLENGE_CONFIG = MESSAGE_BOARD_CONFIG.challenges;
+const WORKER_ROUND_MS = 10000;
+const WORKER_SCAN_STEP_MS = 1000;
 const DEFAULT_SETTINGS = {
   rows: GRID_LIMITS.min,
   cols: GRID_LIMITS.min,
@@ -91,6 +102,9 @@ const shovelResourceElement = document.querySelector("#shovel-resource");
 const flagStockElement = document.querySelector("#flag-stock");
 const flagCapacityElement = document.querySelector("#flag-capacity");
 const flagResourceElement = document.querySelector("#flag-resource");
+const hintResourceElement = document.querySelector("#hint-resource");
+const hintStockElement = document.querySelector("#hint-stock");
+const hintCapacityElement = document.querySelector("#hint-capacity");
 const mineResourceElement = document.querySelector("#mine-resource");
 const activeMineCountElement = document.querySelector("#active-mine-count");
 const mineResourceDetailElement = document.querySelector("#mine-resource-detail");
@@ -99,6 +113,9 @@ const buyShovelDetailElement = document.querySelector("#buy-shovel-detail");
 const buyShovelCostElement = document.querySelector("#buy-shovel-cost");
 const buyFlagsButton = document.querySelector("#buy-flags");
 const buyFlagsCostElement = document.querySelector("#buy-flags-cost");
+const buyHintsButton = document.querySelector("#buy-hints");
+const buyHintsCostElement = document.querySelector("#buy-hints-cost");
+const useHintButton = document.querySelector("#use-hint");
 const storeNoteElement = document.querySelector("#store-note");
 const statsGridElement = document.querySelector("#stats-grid");
 const fastestConfigsElement = document.querySelector("#fastest-configs");
@@ -143,6 +160,7 @@ const surveyorCardElement = document.querySelector("#surveyor-card");
 const agentListElement = document.querySelector("#agent-list");
 const specialistListElement = document.querySelector("#specialist-list");
 const specialistNoteElement = document.querySelector("#specialist-note");
+const workerProofElement = document.querySelector("#worker-proof");
 const boardInputController = createCellInputController();
 
 let autoQueueView = false;
@@ -216,11 +234,13 @@ let roundUsedChording = false;
 let roundResolved = false;
 let selectedEquipmentId = null;
 let activeEquipment = createRoundEquipmentState();
+let revealedHints = [];
 let lastChallengeTickTime = performance.now();
 let player = createStartingPlayer();
 let currentMode = GAME_MODES.fieldQueue;
 let fieldQueueState = null;
-let autoMinersState = null;
+let autoMinersState = createAutoMinerState(SPECIALISTS, performance.now());
+let autoMineMenuOpen = false;
 let developerTelemetry = createDeveloperTelemetry();
 const stateEngine = createGame({
   config: GAME_CONFIG,
@@ -239,6 +259,7 @@ function createStartingPlayer() {
     coins: BALANCE_CONFIG.startingCoins,
     shovels: BALANCE_CONFIG.startingShovels,
     flags: BALANCE_CONFIG.startingFlags,
+    hints: BALANCE_CONFIG.startingHints,
     mines: BALANCE_CONFIG.startingMines,
     shovelTier: 0,
     shovelUses: BALANCE_CONFIG.startingShovels * durability,
@@ -301,6 +322,7 @@ function createModeState() {
     roundUsedChording,
     selectedEquipmentId,
     activeEquipment: { ...activeEquipment },
+    revealedHints: [...revealedHints],
     statusText: statusElement.textContent,
     resetText: resetButton.textContent,
     running: false,
@@ -328,16 +350,13 @@ function loadModeState(state) {
   roundUsedChording = state.roundUsedChording;
   selectedEquipmentId = state.selectedEquipmentId;
   activeEquipment = { ...state.activeEquipment };
+  revealedHints = state.revealedHints || [];
+  refreshProofMetadata(board, settings);
   statusElement.textContent = state.statusText;
   resetButton.textContent = state.resetText;
 }
 
 function saveCurrentModeState() {
-  if (currentMode === GAME_MODES.autoMiners) {
-    saveAutoActiveField();
-    return;
-  }
-
   fieldQueueState = createModeState();
 }
 
@@ -349,6 +368,7 @@ function captureGameState() {
   const savedAutoMiners = autoMinersState
     ? {
         ...JSON.parse(JSON.stringify(autoMinersState)),
+        workerTasks: encodeWorkerTasks(autoMinersState.workerTasks, now),
         queue: autoMinersState.queue.map((field) => encodeModeState(field, now)),
         surveyElapsedMs: Math.max(0, now - autoMinersState.lastSurveyAt),
         workerElapsedMs: autoMinersState.lastWorkerTickAt > 0
@@ -391,17 +411,20 @@ function replaceGameState(savedState) {
   };
   settings = { ...savedState.settings };
   developerTelemetry = hydrateDeveloperTelemetry(savedState.developerTelemetry);
-  currentMode = savedState.currentMode;
+  currentMode = GAME_MODES.fieldQueue;
   fieldQueueState = decodeModeState(savedState.fieldQueue, now);
   autoMinersState = savedState.autoMiners
     ? {
         ...savedState.autoMiners,
         queue: savedState.autoMiners.queue.map((field) => decodeModeState(field, now)),
+        workerTasks: decodeWorkerTasks(savedState.autoMiners.workerTasks, now),
+        automationMode: savedState.autoMiners.automationMode || "manual",
+        workerPolicies: { excavator: "focus", flagbearer: "focus", ...(savedState.autoMiners.workerPolicies || {}) },
         lastSurveyAt: now - savedState.autoMiners.surveyElapsedMs,
         lastWorkerTickAt: now - savedState.autoMiners.workerElapsedMs,
         statusText: savedState.autoMiners.notice?.args?.text || "",
       }
-    : null;
+    : createAutoMinerState(SPECIALISTS, now);
   if (autoMinersState) {
     delete autoMinersState.surveyElapsedMs;
     delete autoMinersState.workerElapsedMs;
@@ -416,11 +439,9 @@ function replaceGameState(savedState) {
   contractModalElement.hidden = true;
   fieldClearModalElement.hidden = true;
   equipmentInventoryElement.hidden = true;
-  document.body.classList.toggle("is-auto-miners", currentMode === GAME_MODES.autoMiners);
+  document.body.classList.remove("is-auto-miners");
 
-  if (currentMode === GAME_MODES.autoMiners) {
-    loadAutoActiveField();
-  } else if (fieldQueueState) {
+  if (fieldQueueState) {
     loadModeState(fieldQueueState);
     if (!developerTelemetry.currentRun) {
       restartDeveloperRun(developerTelemetry, {
@@ -535,6 +556,7 @@ function placeMines(safeIndex) {
   minesPlaced = true;
   placeTreasures(mineTarget);
   updateAdjacency();
+  refreshProofMetadata(board, settings);
 }
 
 function placeTreasures(mineTarget) {
@@ -630,7 +652,6 @@ function maxMineCount(radius = currentSafetyRadius()) {
 }
 
 function currentSafetyRadius() {
-  if (currentMode === GAME_MODES.autoMiners) return surveyorSafetyRadius();
   return player.safetyRadius;
 }
 
@@ -656,6 +677,7 @@ function availableMines() {
 
 function updateAdjacency(cells = board) {
   updateBoardAdjacency(cells, settings);
+  refreshProofMetadata(cells, settings);
 }
 
 function neighbors(cell, cells = board) {
@@ -696,6 +718,7 @@ function startGame() {
   roundTreasureCount = 0;
   roundFlagPlacements = 0;
   roundUsedChording = false;
+  revealedHints = [];
   selectedEquipmentId = null;
   activeEquipment = createRoundEquipmentState();
   equipmentInventoryElement.hidden = true;
@@ -709,9 +732,12 @@ function startGame() {
 }
 
 function render() {
-  const isAutoMode = currentMode === GAME_MODES.autoMiners;
+  refreshProofMetadata(board, settings);
+  useHintButton.disabled = gameOver || isRevealing || !roundStarted || player.hints <= 0 || availableProofs(board, settings).length === 0;
+  const isAutoMode = false;
   boardElement.innerHTML = "";
   updateSurveyorUI();
+  renderWorkerProof();
   if (isAutoMode && autoQueueView) {
     renderAutoQueueView();
     updateQuartermaster();
@@ -753,6 +779,11 @@ function render() {
     button.setAttribute("role", "gridcell");
     button.setAttribute("aria-label", labelForCell(cell));
     button.dataset.index = String(cell.index);
+    const hint = revealedHints.find((entry) => entry.clueIndex === cell.index || entry.targetIndexes.includes(cell.index));
+    if (hint) {
+      button.classList.add("is-hinted");
+      button.title = `Hint: ${hint.type}`;
+    }
 
     if (cell.open) {
       button.classList.add("is-open");
@@ -787,8 +818,18 @@ function render() {
       button.classList.add("is-equipment-target");
     }
 
+    workerMarkersForCell(cell.index).forEach((worker) => {
+      button.classList.add("is-worker-cursor");
+      const marker = document.createElement("span");
+      marker.className = `worker-cursor worker-cursor--${worker.id}`;
+      marker.textContent = worker.id === "excavator" ? "E" : "F";
+      marker.title = `${worker.name}: ${workerTaskLabel(worker.task)}`;
+      marker.setAttribute("aria-hidden", "true");
+      button.append(marker);
+    });
+
     boardInputController.bind(button, {
-      enableLongPress: isAutoMode || !selectedEquipmentId,
+    enableLongPress: !selectedEquipmentId,
       onActivate: () => dispatchGameAction("board/activate", { index: cell.index }),
       onFlag: () => dispatchGameAction("board/flag", { index: cell.index }),
     });
@@ -798,9 +839,7 @@ function render() {
 
   mineCountElement.textContent = String(Math.max(currentMineCount() - flagsPlaced, 0)).padStart(2, "0");
   moveCountElement.textContent = String(moves).padStart(2, "0");
-  settingsNote.textContent = isAutoMode
-    ? `Auto Miners use ${settings.rows}×${settings.cols} with ${settings.mines} mine${settings.mines === 1 ? "" : "s"}.`
-    : formatMessage("settingsNote", {
+  settingsNote.textContent = formatMessage("settingsNote", {
       mines: settings.mines,
       plural: settings.mines === 1 ? "" : "s",
       safety: player.safetyRadius > 0
@@ -826,17 +865,95 @@ function labelForCell(cell) {
   return `Row ${cell.row + 1}, column ${cell.col + 1}, hidden`;
 }
 
+function useHint() {
+  if (gameOver || isRevealing || !roundStarted || player.hints <= 0) return false;
+  refreshProofMetadata(board, settings);
+  const proofs = availableProofs(board, settings);
+  if (!proofs.length) {
+    statusElement.textContent = "No calculated proof is available yet.";
+    render();
+    return false;
+  }
+  const scored = proofs.map((proof) => ({
+    ...proof,
+    score: scoreProofCascade(board, settings, proof),
+  })).sort((left, right) => right.score - left.score || left.clueIndex - right.clueIndex);
+  const candidates = scored.slice(0, 5);
+  const hint = candidates[Math.floor(Math.random() * candidates.length)];
+  player.hints -= 1;
+  revealedHints.push({ type: hint.type, clueIndex: hint.clueIndex, targetIndexes: hint.targetIndexes });
+  statusElement.textContent = `Hint: ${hint.type} near row ${board[hint.clueIndex].row + 1}, column ${board[hint.clueIndex].col + 1}.`;
+  render();
+  return true;
+}
+
+function telemetryTile(cell) {
+  const nearby = neighbors(cell);
+  return {
+    index: cell.index,
+    row: cell.row,
+    col: cell.col,
+    adjacent: cell.adjacent,
+    flaggedNeighbors: nearby.filter((neighbor) => neighbor.flagged).length,
+    hiddenNeighbors: nearby.filter((neighbor) => !neighbor.open && !neighbor.flagged).length,
+  };
+}
+
+function actionEvidence(cell, includeTarget = false) {
+  const evidence = neighbors(cell)
+    .filter((neighbor) => neighbor.open && !neighbor.mine)
+    .map(telemetryTile);
+  return includeTarget ? [telemetryTile(cell), ...evidence] : evidence;
+}
+
+function recordBoardAction({ actor = "player", specialistId = null, actionType, cell, evidence, result }) {
+  if (!cell) return;
+  recordDeveloperAction(developerTelemetry, {
+    actor,
+    ...(specialistId ? { specialistId } : {}),
+    actionType,
+    target: { index: cell.index, row: cell.row, col: cell.col },
+    timeMs: roundStarted && Number.isFinite(roundStartTime)
+      ? Math.max(0, performance.now() - roundStartTime)
+      : 0,
+    evidence: evidence || actionEvidence(cell),
+    result,
+  });
+}
+
 function openCell(index) {
   const cell = board[index];
   if (gameOver || isRevealing || cell.open || cell.flagged) return;
   if (currentMode === GAME_MODES.autoMiners) {
+    if (!canDig()) {
+      if (!maybeGrantEmergencyShovel()) {
+        emergencyHandoutNotice = false;
+        statusElement.textContent = formatMessage("noShovels");
+        render();
+        return;
+      }
+    } else {
+      emergencyHandoutNotice = false;
+    }
+
     startRoundIfNeeded();
     moves += 1;
+    recordDeveloperEvent(developerTelemetry, { type: "dig" });
+    recordBoardAction({
+      actionType: "dig",
+      cell,
+      result: cell.mine
+        ? { outcome: "mine_hit", revealedTiles: [cell.index] }
+        : { outcome: "opened", revealedTiles: revealWavesFrom(cell).flat().filter((target) => !target.mine).map((target) => target.index) },
+    });
     if (cell.mine) {
+      recordDeveloperEvent(developerTelemetry, { type: "mineHit" });
+      breakShovel();
       cell.open = true;
       loseGame();
       return;
     }
+    consumeShovel();
     revealAutoCell(cell);
     if (hasWon()) winGame();
     else {
@@ -862,6 +979,14 @@ function openCell(index) {
 
   if (!minesPlaced) placeMines(cell.index);
   moves += 1;
+
+  recordBoardAction({
+    actionType: "dig",
+    cell,
+    result: cell.mine
+      ? { outcome: "mine_hit", revealedTiles: [cell.index] }
+      : { outcome: "opened", revealedTiles: revealWavesFrom(cell).flat().filter((target) => !target.mine).map((target) => target.index) },
+  });
 
   if (cell.mine) {
     recordDeveloperEvent(developerTelemetry, { type: "mineHit" });
@@ -948,6 +1073,15 @@ async function chordCell(index) {
 
   moves += 1;
   roundUsedChording = true;
+  recordBoardAction({
+    actionType: "chord",
+    cell,
+    evidence: actionEvidence(cell, true),
+    result: {
+      outcome: candidates.some((candidate) => candidate.mine) ? "mine_hit" : "opened",
+      revealedTiles: candidates.filter((candidate) => !candidate.mine).map((candidate) => candidate.index),
+    },
+  });
   recordDeveloperEvent(developerTelemetry, { type: "chord" });
   isRevealing = true;
   const token = ++revealToken;
@@ -1027,9 +1161,25 @@ function toggleFlag(index) {
   if (gameOver || isRevealing || cell.open) return;
 
   if (currentMode === GAME_MODES.autoMiners) {
+    const willFlag = !cell.flagged;
+    const wasPlayerFlag = cell.flaggedByPlayer;
+    if (willFlag && player.flags <= 0) {
+      emergencyHandoutNotice = false;
+      statusElement.textContent = formatMessage("flagPouchEmpty");
+      render();
+      return;
+    }
+    recordBoardAction({
+      actionType: "flag",
+      cell,
+      result: { outcome: willFlag ? "flag_placed" : "flag_removed" },
+    });
     cell.flagged = !cell.flagged;
-    cell.flaggedByPlayer = cell.flagged;
+    cell.flaggedByPlayer = willFlag;
     flagsPlaced += cell.flagged ? 1 : -1;
+    player.flags += willFlag ? -1 : (wasPlayerFlag ? 1 : 0);
+    if (willFlag) roundFlagPlacements += 1;
+    recordDeveloperEvent(developerTelemetry, { type: willFlag ? "flagPlaced" : "flagRemoved" });
     moves += 1;
     statusElement.textContent = cell.flagged ? "Field Queue: flag planted." : "Field Queue: flag cleared.";
     saveAutoActiveField();
@@ -1050,6 +1200,12 @@ function toggleFlag(index) {
   }
 
   emergencyHandoutNotice = false;
+  const willFlag = !cell.flagged;
+  recordBoardAction({
+    actionType: "flag",
+    cell,
+    result: { outcome: willFlag ? "flag_placed" : "flag_removed" },
+  });
   cell.flagged = !cell.flagged;
   cell.flaggedByPlayer = cell.flagged;
   if (cell.flagged) roundFlagPlacements += 1;
@@ -1089,26 +1245,31 @@ function useSelectedEquipment(index) {
     statusElement.textContent = cell.mine
       ? `Probe Charge: row ${cell.row + 1}, column ${cell.col + 1} contains a mine.`
       : `Probe Charge: row ${cell.row + 1}, column ${cell.col + 1} is clear.`;
+    recordBoardAction({ actionType: "probe_charge", cell, result: { outcome: cell.mine ? "mine_detected" : "clear_detected" } });
   } else if (item.id === "controlledBlast") {
     startRoundIfNeeded();
     spendSelectedEquipment(item.id);
     const destroyed = controlledBlast(cell);
     statusElement.textContent = `Controlled Blast opened the zone${destroyed > 0 ? ` and destroyed ${destroyed} mine${destroyed === 1 ? "" : "s"}` : ""}.`;
+    recordBoardAction({ actionType: "controlled_blast", cell, result: { outcome: "activated", minesDestroyed: destroyed } });
   } else if (item.id === "seismicTrap") {
     startRoundIfNeeded();
     spendSelectedEquipment(item.id);
     const total = rowColumnMineCount(cell);
     statusElement.textContent = `Seismic Trap: ${total} mine${total === 1 ? "" : "s"} in that row and column.`;
+    recordBoardAction({ actionType: "seismic_trap", cell, result: { outcome: "activated", minesDetected: total } });
   } else if (item.id === "bombBot") {
     startRoundIfNeeded();
     spendSelectedEquipment(item.id);
     activeEquipment.bombBotUses = 15;
     statusElement.textContent = "Bomb-Bot deployed for the next 15 opened squares.";
+    recordBoardAction({ actionType: "bomb_bot", cell, result: { outcome: "activated", protectedOpens: 15 } });
   } else if (item.id === "mineEncapsulation") {
     startRoundIfNeeded();
     spendSelectedEquipment(item.id);
     activeEquipment.mineEncapsulationUses = 20;
     statusElement.textContent = "Mine Encapsulation armed for the next 20 flag attempts.";
+    recordBoardAction({ actionType: "mine_encapsulation", cell, result: { outcome: "activated", protectedFlags: 20 } });
   }
 
   clearSelectedEquipment();
@@ -1174,6 +1335,11 @@ function useMineEncapsulation(cell) {
   activeEquipment.mineEncapsulationUses = Math.max(0, activeEquipment.mineEncapsulationUses - 1);
   roundFlagPlacements += 1;
   recordDeveloperEvent(developerTelemetry, { type: "flagPlaced" });
+  recordBoardAction({
+    actionType: "flag",
+    cell,
+    result: { outcome: cell.mine ? "mine_collected" : "clear_revealed" },
+  });
 
   if (cell.mine) {
     player.mines += 1;
@@ -1240,10 +1406,6 @@ function startRoundIfNeeded() {
 
 function loseGame() {
   if (roundResolved) return;
-  if (currentMode === GAME_MODES.autoMiners) {
-    finishAutoField(false);
-    return;
-  }
   roundResolved = true;
   gameOver = true;
   const contractType = activeContractType();
@@ -1267,15 +1429,12 @@ function loseGame() {
     emergencyHandoutNotice = false;
     statusElement.textContent = formatMessage("boomWaiting");
   }
+  if (advanceToNextQueuedField("lost")) return;
   render();
 }
 
 function winGame() {
   if (roundResolved) return;
-  if (currentMode === GAME_MODES.autoMiners) {
-    finishAutoField(true);
-    return;
-  }
   roundResolved = true;
   gameOver = true;
   const contractType = activeContractType();
@@ -1329,6 +1488,24 @@ function winGame() {
     ? formatMessage("recoverySuffix", { count: recovered, plural: recovered === 1 ? "" : "s" })
     : "";
   statusElement.textContent = formatMessage("boardClear", { reward: rewardText, recovery: recoveryText }) + contractText + challengeText;
+  if (advanceToNextQueuedField("cleared")) return;
+}
+
+function advanceToNextQueuedField(outcome) {
+  if (!autoMinersState?.queue?.length) return false;
+  const nextField = autoMinersState.queue.shift();
+  normalizeWorkerFieldsAfterRemoval(0);
+  loadModeState(nextField);
+  resetButton.textContent = "READY";
+  statusElement.textContent = outcome === "lost"
+    ? "Field collapsed. The next surveyed field is now active."
+    : "Field cleared. The next surveyed field is now active.";
+  restartDeveloperRun(developerTelemetry, {
+    ...settings,
+    contractId: activeContractType()?.id || null,
+  });
+  render();
+  return true;
 }
 
 function recoverFlaggedMines() {
@@ -1395,40 +1572,51 @@ function canPurchase() {
   return !isContractActive();
 }
 
-function buyShovel() {
-  const cost = shovelSupplyCost();
-  if (!canPurchase() || player.coins < cost || player.shovels >= shovelCapacity()) return;
+function purchaseSupply(targetId) {
+  if (targetId === "shovel") {
+    const cost = shovelSupplyCost();
+    if (player.coins < cost || player.shovels >= shovelCapacity()) return false;
 
-  emergencyHandoutNotice = false;
-  player.coins -= cost;
-  player.shovels += 1;
-  player.shovelUses += currentShovel().durability;
-  recordDeveloperEvent(developerTelemetry, { type: "purchase", id: "shovel" });
-  statusElement.textContent = formatMessage("suppliesShovel");
-  render();
+    emergencyHandoutNotice = false;
+    player.coins -= cost;
+    player.shovels += 1;
+    player.shovelUses += currentShovel().durability;
+    statusElement.textContent = formatMessage("suppliesShovel");
+    return true;
+  }
+
+  if (targetId === "flags") {
+    const cost = flagSupplyCost();
+    if (player.coins < cost || player.flags >= flagCapacity()) return false;
+
+    emergencyHandoutNotice = false;
+    player.coins -= cost;
+    player.flags = Math.min(flagCapacity(), player.flags + BALANCE_CONFIG.shovel.flagBundleSize);
+    statusElement.textContent = formatMessage("suppliesFlags", { count: BALANCE_CONFIG.shovel.flagBundleSize });
+    return true;
+  }
+
+  if (targetId === "hints") {
+    const cost = BALANCE_CONFIG.shovel.hintSupplyCost;
+    const bundle = BALANCE_CONFIG.shovel.hintBundleSize;
+    if (player.coins < cost || player.hints + bundle > hintCapacity()) return false;
+    player.coins -= cost;
+    player.hints += bundle;
+    statusElement.textContent = `Hint bundle stocked: +${bundle}.`;
+    return true;
+  }
+
+  return false;
 }
 
-function buyFlags() {
-  const cost = flagSupplyCost();
-  if (!canPurchase() || player.coins < cost || player.flags >= flagCapacity()) return;
-
-  emergencyHandoutNotice = false;
-  player.coins -= cost;
-  player.flags = Math.min(flagCapacity(), player.flags + BALANCE_CONFIG.shovel.flagBundleSize);
-  recordDeveloperEvent(developerTelemetry, { type: "purchase", id: "flags" });
-  statusElement.textContent = formatMessage("suppliesFlags", { count: BALANCE_CONFIG.shovel.flagBundleSize });
-  render();
-}
-
-function buySpecialEquipment(id) {
+function purchaseEquipment(id) {
   const item = SPECIAL_EQUIPMENT_BY_ID[id];
-  if (!item || !canPurchase() || player.mines < item.cost || !hasSpecialEquipmentAccess()) return;
+  if (!item || player.mines < item.cost || !hasSpecialEquipmentAccess()) return false;
 
   player.mines -= item.cost;
   player.specialEquipment[id] = (player.specialEquipment[id] || 0) + 1;
-  recordDeveloperEvent(developerTelemetry, { type: "purchase", id: `equipment:${id}` });
   statusElement.textContent = `${item.name} stocked. Open the cabinet inventory during a round to use it.`;
-  render();
+  return true;
 }
 
 function activateEquipment(id) {
@@ -1454,20 +1642,19 @@ function activateEquipment(id) {
   useSelectedEquipment(0);
 }
 
-function improveShovel() {
-  buyUpgrade("improveShovel");
-}
-
-function buyUpgrade(id) {
-  if (!canPurchase() || !isUpgradeUnlocked(id)) return;
+function purchaseUpgrade(targetId) {
+  if (targetId === "shovelCapacity") return purchaseCapacityUpgrade("shovel");
+  if (targetId === "flagCapacity") return purchaseCapacityUpgrade("flags");
+  if (!isUpgradeUnlocked(targetId)) return false;
+  const id = targetId;
   const item = PROGRESSION_CONFIG.items[id];
-  if (!item) return;
+  if (!item) return false;
 
   if (id === "improveShovel") {
     const nextTierIndex = player.shovelTier + 1;
-    if (nextTierIndex >= BALANCE_CONFIG.shovel.tiers.length) return;
+    if (nextTierIndex >= BALANCE_CONFIG.shovel.tiers.length) return false;
     const cost = exponentialCost(item.baseCost, item.growth, player.shovelTier);
-    if (player.coins < cost) return;
+    if (player.coins < cost) return false;
     const intactShovels = player.shovels;
     player.coins -= cost;
     player.shovelTier = nextTierIndex;
@@ -1483,59 +1670,73 @@ function buyUpgrade(id) {
       betterFlags: "betterFlagsLevel",
     };
     const levelKey = levelKeys[id];
-    if (!levelKey) return;
+    if (!levelKey) return false;
     const level = player[levelKey];
     const cost = exponentialCost(item.baseCost, item.growth, level);
-    if (player.coins < cost) return;
-    if ((id === "tallerGrid" || id === "widerGrid") && level >= GRID_LIMITS.max - GRID_LIMITS.min) return;
+    if (player.coins < cost) return false;
+    if ((id === "tallerGrid" || id === "widerGrid") && level >= GRID_LIMITS.max - GRID_LIMITS.min) return false;
     player.coins -= cost;
     player[levelKey] += 1;
   }
 
   statusElement.textContent = formatMessage("upgradeInstalled", { name: item.name });
-  recordDeveloperEvent(developerTelemetry, { type: "purchase", id: `upgrade:${id}` });
-  render();
+  return true;
 }
 
-function buyCapacityUpgrade(kind) {
-  if (!canPurchase()) return;
+function purchaseCapacityUpgrade(kind) {
   const levels = kind === "shovel" ? BALANCE_CONFIG.capacity.shovel : BALANCE_CONFIG.capacity.flags;
   const levelKey = kind === "shovel" ? "shovelCapacityLevel" : "flagCapacityLevel";
   const costs = kind === "shovel" ? BALANCE_CONFIG.upgrades.shovelCapacityCosts : BALANCE_CONFIG.upgrades.flagCapacityCosts;
   const level = player[levelKey];
-  if (level + 1 >= levels.length) return;
+  if (level + 1 >= levels.length) return false;
   const cost = costs[level];
-  if (player.coins < cost) return;
+  if (player.coins < cost) return false;
 
   player.coins -= cost;
   player[levelKey] += 1;
-  recordDeveloperEvent(developerTelemetry, { type: "purchase", id: `capacity:${kind}` });
   statusElement.textContent = formatMessage("storageExpanded", { kind: kind === "shovel" ? COPY_CONFIG.upgradeLabels.shovelLocker : COPY_CONFIG.upgradeLabels.flagLocker });
-  render();
+  return true;
 }
 
-function buyAbility(id) {
-  if (!canPurchase()) return;
+function purchaseAbility(id) {
   let abilityMessage = formatMessage("abilityInstalled");
 
   if (id === "safetyRadius") {
-    if (player.safetyRadius >= 5) return;
-    if (maxMineCount(player.safetyRadius + 1) < 1) return;
+    if (player.safetyRadius >= 5) return false;
+    if (maxMineCount(player.safetyRadius + 1) < 1) return false;
     const cost = BALANCE_CONFIG.abilities.safetyRadiusCosts[player.safetyRadius];
-    if (player.coins < cost) return;
+    if (player.coins < cost) return false;
     player.coins -= cost;
     player.safetyRadius += 1;
     settings.mines = Math.min(settings.mines, Math.min(maxMineCount(), maxUnlockedMineCount()));
     abilityMessage = formatMessage("safetyInstalled", { value: player.safetyRadius });
   } else if (id === "chording") {
-    if (player.chordingUnlocked || player.shovelTier < 3 || player.mines < BALANCE_CONFIG.abilities.chordingMineCost) return;
+    if (player.chordingUnlocked || player.shovelTier < 3 || player.mines < BALANCE_CONFIG.abilities.chordingMineCost) return false;
     player.mines -= BALANCE_CONFIG.abilities.chordingMineCost;
     player.chordingUnlocked = true;
     abilityMessage = formatMessage("chordingUnlocked");
-  }
-  recordDeveloperEvent(developerTelemetry, { type: "purchase", id: `ability:${id}` });
+  } else return false;
   if (!roundStarted || gameOver) startGame();
   statusElement.textContent = abilityMessage;
+  return true;
+}
+
+function buyPurchase(id) {
+  const purchaseable = STORE_PURCHASEABLE_BY_ID[id];
+  const purchased = performPurchase({
+    registry: STORE_PURCHASEABLE_BY_ID,
+    id,
+    isAvailable: canPurchase,
+    handlers: {
+      supply: ({ targetId }) => purchaseSupply(targetId),
+      upgrade: ({ targetId }) => purchaseUpgrade(targetId),
+      ability: ({ targetId }) => purchaseAbility(targetId),
+      equipment: ({ targetId }) => purchaseEquipment(targetId),
+    },
+  });
+  if (!purchased) return;
+
+  recordDeveloperEvent(developerTelemetry, { type: "purchase", id: purchaseable.telemetryId });
   render();
 }
 
@@ -1570,7 +1771,7 @@ function resetProgress() {
   settings = { ...DEFAULT_SETTINGS };
   currentMode = GAME_MODES.fieldQueue;
   fieldQueueState = null;
-  autoMinersState = null;
+  autoMinersState = createAutoMinerState(SPECIALISTS, performance.now());
   autoQueueView = false;
   contractModalElement.hidden = true;
   fieldClearModalElement.hidden = true;
@@ -1581,47 +1782,17 @@ function resetProgress() {
 }
 
 function switchToFieldQueue() {
-  if (currentMode === GAME_MODES.fieldQueue) return;
-  saveCurrentModeState();
-  currentMode = GAME_MODES.fieldQueue;
-  autoQueueView = false;
-  document.body.classList.remove("is-auto-miners");
-  if (fieldQueueState) loadModeState(fieldQueueState);
+  autoMineMenuOpen = false;
   render();
 }
 
 function showAutoQueueList() {
-  if (currentMode === GAME_MODES.autoMiners) {
-    if (autoQueueView) return;
-    saveAutoActiveField();
-    autoQueueView = true;
-    render();
-    return;
-  }
-  saveCurrentModeState();
-  currentMode = GAME_MODES.autoMiners;
-  document.body.classList.add("is-auto-miners");
-  if (!autoMinersState) autoMinersState = createAutoMinersState();
-  autoQueueView = true;
-  resetButton.textContent = "BACK";
+  autoMineMenuOpen = !autoMineMenuOpen;
   render();
 }
 
 function switchToAutoMiners() {
-  if (currentMode === GAME_MODES.autoMiners) {
-    autoQueueView = false;
-    loadAutoActiveField();
-    render();
-    return;
-  }
-  saveCurrentModeState();
-  currentMode = GAME_MODES.autoMiners;
-  autoQueueView = false;
-  document.body.classList.add("is-auto-miners");
-  if (!autoMinersState) autoMinersState = createAutoMinersState();
-  loadAutoActiveField();
-  resetButton.textContent = "BACK";
-  render();
+  showAutoQueueList();
 }
 
 function createAutoMinersState() {
@@ -1636,7 +1807,7 @@ function tickAutoMiners() {
   }
   const now = performance.now();
   let changed = false;
-  if (specialistLevel("surveyor") > 0
+  if (autoMinersState.automationMode !== "manual" && specialistLevel("surveyor") > 0
     && autoMinersState.queue.length < 5
     && now - autoMinersState.lastSurveyAt >= surveyorIntervalMs()) {
     autoMinersState.queue.push(createQueuedField());
@@ -1645,16 +1816,15 @@ function tickAutoMiners() {
     changed = true;
   }
 
-  if (now - autoMinersState.lastWorkerTickAt >= 1000) {
+  if (autoMinersState.automationMode !== "manual" && now - autoMinersState.lastWorkerTickAt >= 1000) {
     autoMinersState.lastWorkerTickAt = now;
-    changed = runWorkerInitiative("agents") || changed;
-    changed = runWorkerInitiative("specialists") || changed;
+    changed = runWorkerInitiative("agents", now) || changed;
+    // Analyze intentionally has the same active roster as Assist for now.
+    // The specialist cards remain visible as a roadmap until their rule logic
+    // is implemented against the shared board action API.
   }
 
-  if (currentMode === GAME_MODES.autoMiners && changed) {
-    loadAutoActiveField();
-    render();
-  }
+  if (changed) render();
   updateSurveyorUI();
 }
 
@@ -1678,16 +1848,11 @@ function surveyNow() {
     render();
     return;
   }
-  if (currentMode === GAME_MODES.autoMiners) saveAutoActiveField();
   autoMinersState.queue.push(createQueuedField());
   autoMinersState.lastSurveyAt = performance.now();
   autoMinersState.statusText = "Debug survey complete. A new field entered the queue.";
-  if (currentMode === GAME_MODES.autoMiners) {
-    loadAutoActiveField();
-    render();
-  } else {
-    updateSurveyorUI();
-  }
+  updateSurveyorUI();
+  render();
 }
 
 function hasActiveAutoField() {
@@ -1726,6 +1891,7 @@ function createQueuedField() {
   const normalMaximum = Math.min(maximum, Math.max(minimum, Math.round(rows * cols * 0.18)));
   settings = { rows, cols, mines: randomInteger(minimum, normalMaximum) };
   board = createBoard();
+  revealedHints = [];
   gameOver = false;
   roundStarted = true;
   roundStartTime = performance.now();
@@ -1753,45 +1919,94 @@ function createQueuedField() {
   return field;
 }
 
-function runWorkerInitiative(group) {
+function runWorkerInitiative(group, now) {
   const order = autoMinersState.initiative[group] || [];
   let changed = false;
   order.forEach((id) => {
     if (!fieldClearModalElement.hidden) return;
-    const level = specialistLevel(id);
-    if (id === "surveyor" || level <= 0) return;
-    for (let turn = 0; turn < level; turn += 1) changed = runWorkerTurn(id) || changed;
+    if (id === "surveyor" || specialistLevel(id) <= 0) return;
+    changed = advanceWorkerTurn(id, now) || changed;
   });
   return changed;
 }
 
-function runWorkerTurn(id) {
-  const queueIndex = autoMinersState.workerFields[id] || 0;
-  if (queueIndex >= autoMinersState.queue.length) return false;
-  const activeWasFirst = queueIndex === 0;
-  const visibleState = createModeState();
-  loadModeState(autoMinersState.queue[queueIndex]);
-  const target = id === "excavator" ? findExcavatorTarget() : id === "flagbearer" ? findFlagbearerTarget() : null;
-  if (target) {
-    if (id === "excavator") revealAutoCell(target);
-    else flagAutoCell(target);
-    moves += 1;
-    autoMinersState.statusText = `${SPECIALISTS.find((worker) => worker.id === id).name} acted on field ${queueIndex + 1}.`;
-    const nextState = createModeState();
-    nextState.workerCursors = autoMinersState.queue[queueIndex].workerCursors || {};
-    autoMinersState.queue[queueIndex] = nextState;
-    if (hasWon()) {
-      resolveQueuedField(queueIndex, true);
-      if (activeWasFirst) loadAutoActiveField();
-      else loadModeState(visibleState);
-      return true;
-    }
-  } else {
-    autoMinersState.workerFields[id] = queueIndex + 1;
+function advanceWorkerTurn(id, now) {
+  const task = autoMinersState.workerTasks[id];
+  if (!task) return beginWorkerTurn(id, now);
+  if (task.queueIndex >= autoMinersState.queue.length) {
+    delete autoMinersState.workerTasks[id];
+    return true;
   }
-  if (activeWasFirst) loadAutoActiveField();
-  else loadModeState(visibleState);
+
+  const workingActiveBoard = task.queueIndex === -1;
+  const visibleState = workingActiveBoard ? null : createModeState();
+  if (!workingActiveBoard) loadModeState(autoMinersState.queue[task.queueIndex]);
+  let resolved = false;
+
+  if (task.phase === "scanning") {
+    const cell = board[task.cursorIndex];
+    autoMinersState.queue[task.queueIndex].workerCursors ||= {};
+    autoMinersState.queue[task.queueIndex].workerCursors[id] = cell.index;
+    const proof = workerProofForCell(id, cell);
+    if (proof) {
+      task.phase = "analyzing";
+      task.phaseStartedAt = now;
+      task.proof = proof;
+    } else if (task.stepsScanned + 1 >= task.scanOrder.length) {
+      autoMinersState.workerFields[id] = nextWorkerField(id, task.queueIndex);
+      delete autoMinersState.workerTasks[id];
+    } else {
+      task.stepsScanned += 1;
+      task.cursorIndex = task.scanOrder[(task.startOffset + task.stepsScanned) % task.scanOrder.length];
+    }
+  } else if (now - task.phaseStartedAt >= workerRoundDurationMs(id)) {
+    const target = board[task.cursorIndex];
+    performWorkerAction(id, target);
+    delete autoMinersState.workerTasks[id];
+    resolved = hasWon();
+  }
+
+  if (resolved) {
+    if (workingActiveBoard) winGame();
+    else resolveQueuedField(task.queueIndex, true);
+  } else if (!workingActiveBoard) {
+    const nextState = createModeState();
+    nextState.workerCursors = autoMinersState.queue[task.queueIndex]?.workerCursors || {};
+    if (autoMinersState.queue[task.queueIndex]) autoMinersState.queue[task.queueIndex] = nextState;
+  }
+  if (!workingActiveBoard) loadModeState(visibleState);
   return true;
+}
+
+function beginWorkerTurn(id, now) {
+  const queueIndex = autoMinersState.workerFields[id] || 0;
+  const field = queueIndex === -1 ? createModeState() : autoMinersState.queue[queueIndex];
+  if (!field) return false;
+  const order = scanOrderForSettings(id, field.settings);
+  const cursor = field.workerCursors?.[id];
+  const startOffset = Math.max(0, order.indexOf(cursor));
+  autoMinersState.workerTasks[id] = {
+    id,
+    queueIndex,
+    phase: "scanning",
+    cursorIndex: order[startOffset],
+    scanOrder: order,
+    startOffset,
+    stepsScanned: 0,
+    startedAt: now,
+  };
+  return true;
+}
+
+function nextWorkerField(id, queueIndex) {
+  const queueLength = autoMinersState.queue.length;
+  if (queueLength === 0) return -1;
+  const policy = autoMinersState.workerPolicies?.[id] || "focus";
+  if (queueIndex === -1) return 0;
+  if (queueIndex + 1 < queueLength) return queueIndex + 1;
+  // Focus returns to the visible board once queued fields are exhausted;
+  // Jump also wraps there before beginning its next pass.
+  return -1;
 }
 
 function scanOrder(id) {
@@ -1803,44 +2018,51 @@ function scanOrder(id) {
   return order;
 }
 
-function scanFromCursor(id, predicate) {
-  const field = autoMinersState.queue[autoMinersState.workerFields[id] || 0];
-  field.workerCursors ||= {};
-  const order = scanOrder(id);
-  const start = Math.max(0, order.indexOf(field.workerCursors[id]));
-  for (let offset = 0; offset < order.length; offset += 1) {
-    const cell = board[order[(start + offset) % order.length]];
-    const target = predicate(cell);
-    if (target) {
-      field.workerCursors[id] = cell.index;
-      return target;
-    }
+function scanOrderForSettings(id, fieldSettings) {
+  if (id === "excavator") return Array.from({ length: fieldSettings.rows * fieldSettings.cols }, (_, index) => index);
+  const order = [];
+  for (let col = 0; col < fieldSettings.cols; col += 1) {
+    for (let row = fieldSettings.rows - 1; row >= 0; row -= 1) order.push(row * fieldSettings.cols + col);
   }
-  return null;
+  return order;
 }
 
-function findExcavatorTarget() {
-  return scanFromCursor("excavator", (cell) => {
-    if (!cell.open || cell.mine || cell.adjacent <= 0) return null;
-    const nearby = neighbors(cell);
-    if (nearby.filter((neighbor) => neighbor.flagged).length < cell.adjacent) return null;
-    return nearby.find((neighbor) => !neighbor.open && !neighbor.flagged && !neighbor.mine) || null;
-  });
+function workerProofForCell(id, cell) {
+  if (cell.open || cell.flagged) return null;
+  const types = id === "excavator"
+    ? ["satisfiedClueSafe"]
+    : ["provenMine", "completeTheCountMine"];
+  return availableProofs(board, settings).find((proof) => types.includes(proof.type) && proof.targetIndexes.includes(cell.index)) || null;
 }
 
-function findFlagbearerTarget() {
-  return scanFromCursor("flagbearer", (cell) => {
-    if (!cell.open || cell.mine || cell.adjacent <= 0) return null;
-    const hidden = neighbors(cell).filter((neighbor) => !neighbor.open && !neighbor.flagged);
-    const flags = neighbors(cell).filter((neighbor) => neighbor.flagged).length;
-    return hidden.length > 0 && hidden.length === cell.adjacent - flags ? hidden[0] : null;
-  });
+function workerRoundDurationMs(id) {
+  return Math.round(WORKER_ROUND_MS / Math.max(1, specialistLevel(id)));
+}
+
+function performWorkerAction(id, target) {
+  if (id === "excavator") {
+    recordBoardAction({
+      actor: "worker",
+      specialistId: id,
+      actionType: "dig",
+      cell: target,
+      result: { outcome: "opened", revealedTiles: revealWavesFrom(target).flat().filter((cell) => !cell.mine).map((cell) => cell.index) },
+    });
+    revealAutoCell(target);
+  } else {
+    recordBoardAction({ actor: "worker", specialistId: id, actionType: "flag", cell: target, result: { outcome: "flag_placed" } });
+    flagAutoCell(target);
+  }
+  moves += 1;
+  const worker = SPECIALISTS.find((item) => item.id === id);
+  autoMinersState.statusText = `${worker.name} acted on field ${(autoMinersState.workerFields[id] || 0) + 1}.`;
 }
 
 function flagAutoCell(cell) {
   cell.flagged = true;
   cell.flaggedByPlayer = false;
   flagsPlaced += 1;
+  refreshProofMetadata(board, settings);
 }
 
 function normalizeWorkerFieldsAfterRemoval(queueIndex) {
@@ -1848,6 +2070,109 @@ function normalizeWorkerFieldsAfterRemoval(queueIndex) {
     const position = autoMinersState.workerFields[id] || 0;
     autoMinersState.workerFields[id] = position > queueIndex ? position - 1 : position;
   });
+  Object.entries(autoMinersState.workerTasks || {}).forEach(([id, task]) => {
+    if (task.queueIndex === queueIndex) delete autoMinersState.workerTasks[id];
+    else if (task.queueIndex > queueIndex) task.queueIndex -= 1;
+  });
+}
+
+function encodeWorkerTasks(tasks = {}, now) {
+  return Object.fromEntries(Object.entries(tasks).map(([id, task]) => {
+    const encoded = {
+      ...task,
+      phaseElapsedMs: task.phaseStartedAt ? Math.max(0, now - task.phaseStartedAt) : 0,
+    };
+    delete encoded.phaseStartedAt;
+    delete encoded.startedAt;
+    return [id, encoded];
+  }));
+}
+
+function decodeWorkerTasks(tasks = {}, now) {
+  return Object.fromEntries(Object.entries(tasks || {}).map(([id, task]) => {
+    const decoded = { ...task };
+    if (decoded.phase !== "scanning") decoded.phaseStartedAt = now - (decoded.phaseElapsedMs || 0);
+    delete decoded.phaseElapsedMs;
+    return [id, decoded];
+  }));
+}
+
+function workerMarkersForCell(index) {
+  if (!autoMinersState?.workerTasks) return [];
+  return Object.entries(autoMinersState.workerTasks)
+    .filter(([, task]) => task.queueIndex === -1 && task.cursorIndex === index)
+    .map(([id, task]) => ({ id, task, name: SPECIALISTS.find((worker) => worker.id === id)?.name || id }));
+}
+
+function workerTaskStage(task) {
+  if (task.phase === "scanning") return "Scanning";
+  return performance.now() - task.phaseStartedAt < workerRoundDurationMs(task.id) / 3 ? "Analyzing" : "Planning action";
+}
+
+function workerTaskLabel(task) {
+  if (task.phase === "scanning") return "Scanning";
+  const stage = workerTaskStage(task);
+  if (stage === "Analyzing") return stage;
+  return task.id === "excavator" ? "Excavating Safe Tile" : "Flagging Mine";
+}
+
+function renderWorkerProof() {
+  if (!workerProofElement) return;
+  if (!autoMineMenuOpen) {
+    workerProofElement.hidden = true;
+    workerProofElement.innerHTML = "";
+    return;
+  }
+  const active = Object.entries(autoMinersState?.workerTasks || {})
+    .map(([id, task]) => ({ id, task }))
+    .find(({ task }) => task.queueIndex === -1 && task.phase !== "scanning");
+  if (!active) {
+    workerProofElement.hidden = true;
+    workerProofElement.innerHTML = "";
+    return;
+  }
+  const { id, task } = active;
+  const worker = SPECIALISTS.find((item) => item.id === id);
+  if (workerTaskStage({ ...task, id }) === "Analyzing") {
+    workerProofElement.hidden = false;
+    workerProofElement.innerHTML = `<strong>${worker.name}: ANALYZING</strong><span>Checking the current clue.</span>`;
+    return;
+  }
+  const proof = task.proof;
+  const clue = board[proof?.clueIndex];
+  if (!proof || !clue) return;
+  workerProofElement.hidden = false;
+  workerProofElement.innerHTML = `
+    <strong>${worker.name}: ${id === "excavator" ? "EXCAVATING SAFE TILE" : "FLAGGING MINE"}</strong>
+    <span>${proof.type === "satisfiedClueSafe" ? "All required mines are accounted for." : "The remaining hidden tiles complete this clue."}</span>
+    <div class="proof-diagram" aria-label="Proof centered on row ${clue.row + 1}, column ${clue.col + 1}">${renderProofCells(clue, task, proof)}</div>
+  `;
+}
+
+function renderProofCells(clue, task, proof) {
+  const targetIndexes = new Set(proof.targetIndexes);
+  const cells = [];
+  for (let row = clue.row - 1; row <= clue.row + 1; row += 1) {
+    for (let col = clue.col - 1; col <= clue.col + 1; col += 1) {
+      const cell = row < 0 || col < 0 || row >= settings.rows || col >= settings.cols ? null : board[row * settings.cols + col];
+      if (!cell) {
+        cells.push('<span class="proof-cell is-void"></span>');
+      } else if (cell.index === clue.index) {
+        cells.push(`<span class="proof-cell is-clue">${cell.adjacent}</span>`);
+      } else if (cell.index === task.cursorIndex) {
+        cells.push(`<span class="proof-cell is-target">${task.id === "excavator" ? "✓" : "⚑"}</span>`);
+      } else if (cell.flagged) {
+        cells.push('<span class="proof-cell is-flag">⚑</span>');
+      } else if (targetIndexes.has(cell.index)) {
+        cells.push('<span class="proof-cell is-proof-target">□</span>');
+      } else if (cell.open) {
+        cells.push(`<span class="proof-cell is-open">${cell.adjacent || "·"}</span>`);
+      } else {
+        cells.push('<span class="proof-cell">□</span>');
+      }
+    }
+  }
+  return cells.join("");
 }
 
 function revealAutoCell(startCell) {
@@ -1861,8 +2186,8 @@ function revealAutoCell(startCell) {
     collectTreasure(cell);
   });
   recentlyRevealed = opened;
+  refreshProofMetadata(board, settings);
   window.setTimeout(() => {
-    if (currentMode !== GAME_MODES.autoMiners) return;
     recentlyRevealed.clear();
     render();
   }, 220);
@@ -1929,13 +2254,12 @@ function surveyorIntervalMs() {
 }
 
 function updateModeUI() {
-  const isAutoMode = currentMode === GAME_MODES.autoMiners;
-  fieldQueueButton.classList.toggle("is-active", !isAutoMode || autoQueueView);
-  autoMinersButton.classList.toggle("is-active", isAutoMode && !autoQueueView);
-  quartermasterPanelElement.setAttribute("aria-label", isAutoMode ? "Auto Miner specialists" : "Quartermaster inventory and store");
-  specialistsPanelElement.hidden = !isAutoMode;
-  document.body.classList.toggle("is-auto-miners", isAutoMode);
-  if (!isAutoMode) return;
+  fieldQueueButton.classList.toggle("is-active", !autoMineMenuOpen);
+  autoMinersButton.classList.toggle("is-active", autoMineMenuOpen);
+  quartermasterPanelElement.setAttribute("aria-label", autoMineMenuOpen ? "Auto Mine shop and worker settings" : "Quartermaster inventory and store");
+  specialistsPanelElement.hidden = !autoMineMenuOpen;
+  document.body.classList.remove("is-auto-miners");
+  if (!autoMineMenuOpen) return;
 
   autoMineFieldElement.textContent = `${autoMinersState.queue.length} / 5`;
   const surveyorLevel = specialistLevel("surveyor");
@@ -1943,6 +2267,7 @@ function updateModeUI() {
     ? `Surveyor reports every ${formatClock(surveyorIntervalMs())}. Starting area: ${surveyorSafetyRadius() === 2 ? "5x5" : surveyorSafetyRadius() === 1 ? "3x3" : "1 tile"}.`
     : "Hire a Surveyor to begin building the Field Queue.";
   renderSurveyorCard();
+  renderAutomationModeList();
   renderWorkerList(agentListElement, "agents");
   renderWorkerList(specialistListElement, "specialists");
 }
@@ -2011,6 +2336,7 @@ function renderWorkerList(element, group) {
           <b>${status}</b>
         </div>
         <p>${specialist.task}</p>
+        ${specialist.group === "agents" ? `<button class="worker-buy" type="button" data-worker-policy="${specialist.id}">${autoMinersState.workerPolicies?.[specialist.id] === "jump" ? "JUMP" : "FOCUS"}</button>` : ""}
         ${button}
       </article>
     `;
@@ -2073,6 +2399,8 @@ function updateQuartermaster() {
   shovelUsesElement.textContent = `${player.shovelUses} digs`;
   flagStockElement.textContent = String(player.flags).padStart(2, "0");
   flagCapacityElement.textContent = `${flagCapacity()} max`;
+  hintStockElement.textContent = String(player.hints).padStart(2, "0");
+  hintCapacityElement.textContent = `${hintCapacity()} max`;
   activeMineCountElement.textContent = String(player.mines).padStart(2, "0");
   mineResourceDetailElement.textContent = steelUnlocked ? `${Math.round(mineCollectionChance() * 100)}% recovery` : "locked";
 
@@ -2081,13 +2409,16 @@ function updateQuartermaster() {
   mineResourceElement.dataset.tooltip = mineTooltip;
   shovelResourceElement.setAttribute("aria-label", `Shovels: ${player.shovels} in stock. ${COPY_CONFIG.tooltips.shovel}.`);
   flagResourceElement.setAttribute("aria-label", `Flags: ${player.flags} in stock. ${COPY_CONFIG.tooltips.flags}.`);
+  hintResourceElement.setAttribute("aria-label", `Hints: ${player.hints} in stock. Reveal one calculated proof.`);
   mineResourceElement.setAttribute("aria-label", mineTooltip);
 
   buyShovelCostElement.textContent = formatCurrency(shovelCost);
   buyFlagsCostElement.textContent = formatCurrency(flagsCost);
+  buyHintsCostElement.textContent = formatCurrency(BALANCE_CONFIG.shovel.hintSupplyCost);
   buyShovelDetailElement.textContent = `+1 ${tier.name.toLowerCase()} shovel · ${shovelCapacity()} max`;
   buyShovelButton.disabled = !canPurchase() || player.coins < shovelCost || player.shovels >= shovelCapacity();
   buyFlagsButton.disabled = !canPurchase() || player.coins < flagsCost || player.flags >= flagCapacity();
+  buyHintsButton.disabled = !canPurchase() || player.coins < BALANCE_CONFIG.shovel.hintSupplyCost || player.hints + BALANCE_CONFIG.shovel.hintBundleSize > hintCapacity();
   storeNoteElement.textContent = canPurchase()
     ? formatMessage("suppliesReady", { name: tier.name, durability: tier.durability })
     : formatMessage("suppliesLocked");
@@ -2105,15 +2436,15 @@ function updateSpecialEquipmentUI() {
   specialEquipmentListElement.innerHTML = SPECIAL_EQUIPMENT.map((item) => {
     const disabled = !canPurchase() || player.mines < item.cost;
     return `
-      <button class="store-item store-item--compact special-equipment-buy" type="button" data-equipment-buy="${item.id}" ${disabled ? "disabled" : ""}>
+      <button class="store-item store-item--compact special-equipment-buy" type="button" data-purchase-id="equipment:${item.id}" ${disabled ? "disabled" : ""}>
         <span class="store-item__copy"><strong>${item.name}</strong><small>${item.description}</small></span>
         <span class="store-item__cost">${item.cost} mine${item.cost === 1 ? "" : "s"}</span>
       </button>
     `;
   }).join("");
 
-  specialEquipmentListElement.querySelectorAll("[data-equipment-buy]").forEach((button) => {
-    button.addEventListener("click", () => dispatchGameAction("equipment/buy", { id: button.dataset.equipmentBuy }));
+  specialEquipmentListElement.querySelectorAll("[data-purchase-id]").forEach((button) => {
+    button.addEventListener("click", () => dispatchGameAction("purchase/buy", { id: button.dataset.purchaseId }));
   });
 
   equipmentInventoryListElement.innerHTML = SPECIAL_EQUIPMENT.map((item) => {
@@ -2874,6 +3205,30 @@ function flagCapacity() {
   return BALANCE_CONFIG.capacity.flags[player.flagCapacityLevel];
 }
 
+function renderAutomationModeList() {
+  const modes = [
+    ["manual", "Manual", "Workers are paused."],
+    ["assist", "Assist", "Surveyor, Excavator, and Flagbearer work."],
+    ["analyze", "Analyze", "Assist behavior; additional analysts are coming soon."],
+  ];
+  const element = document.querySelector("#automation-mode-list");
+  element.innerHTML = modes.map(([id, name, detail]) => `
+    <button class="worker-buy${autoMinersState.automationMode === id ? " is-selected" : ""}" type="button" data-automation-mode="${id}">
+      <strong>${name}</strong><small>${detail}</small>
+    </button>
+  `).join("");
+  element.querySelectorAll("[data-automation-mode]").forEach((button) => {
+    button.addEventListener("click", () => dispatchGameAction("autoMiners/setMode", { mode: button.dataset.automationMode }));
+  });
+  element.querySelectorAll("[data-worker-policy]").forEach((button) => {
+    button.addEventListener("click", () => dispatchGameAction("autoMiners/togglePolicy", { id: button.dataset.workerPolicy }));
+  });
+}
+
+function hintCapacity() {
+  return 10;
+}
+
 function nextCapacity(kind) {
   const levels = kind === "shovel" ? BALANCE_CONFIG.capacity.shovel : BALANCE_CONFIG.capacity.flags;
   const level = kind === "shovel" ? player.shovelCapacityLevel : player.flagCapacityLevel;
@@ -3005,19 +3360,13 @@ const GAME_ACTION_HANDLERS = {
   "board/activate": ({ index }) => activateBoardCell(index),
   "board/flag": ({ index }) => toggleFlag(index),
   "settings/change": applySettingsFromControls,
-  "supplies/buyShovel": buyShovel,
-  "supplies/buyFlags": buyFlags,
+  "purchase/buy": ({ id }) => buyPurchase(id),
   "equipment/toggle": () => {
     if (specialEquipmentTotal() <= 0) return;
     equipmentInventoryElement.hidden = !equipmentInventoryElement.hidden;
     equipmentToggleButton.setAttribute("aria-expanded", String(!equipmentInventoryElement.hidden));
   },
-  "equipment/buy": ({ id }) => buySpecialEquipment(id),
   "equipment/activate": ({ id }) => activateEquipment(id),
-  "progression/improveShovel": improveShovel,
-  "progression/buy": ({ id }) => buyUpgrade(id),
-  "progression/capacity": ({ kind }) => buyCapacityUpgrade(kind),
-  "abilities/buy": ({ id }) => buyAbility(id),
   "contracts/accept": ({ id }) => acceptOfferedContract(id),
   "contracts/generate": generateContractOffer,
   "contracts/closeBriefing": closeContractBriefing,
@@ -3026,18 +3375,26 @@ const GAME_ACTION_HANDLERS = {
   "autoMiners/showField": switchToAutoMiners,
   "autoMiners/survey": surveyNow,
   "autoMiners/hire": ({ id }) => buyWorker(id),
+  "autoMiners/setMode": ({ mode }) => {
+    if (!["manual", "assist", "analyze"].includes(mode)) return;
+    autoMinersState.automationMode = mode;
+    autoMinersState.statusText = `${mode[0].toUpperCase()}${mode.slice(1)} automation selected.`;
+    render();
+  },
+  "autoMiners/togglePolicy": ({ id }) => {
+    if (!autoMinersState.workerPolicies || !["excavator", "flagbearer"].includes(id)) return;
+    autoMinersState.workerPolicies[id] = autoMinersState.workerPolicies[id] === "jump" ? "focus" : "jump";
+    render();
+  },
   "autoMiners/reorder": reorderInitiative,
   "autoMiners/dismissClear": () => {
     fieldClearModalElement.hidden = true;
-    if (currentMode === GAME_MODES.autoMiners) {
-      loadAutoActiveField();
-      render();
-    }
+    render();
   },
   "round/reset": () => {
-    if (currentMode === GAME_MODES.autoMiners) switchToFieldQueue();
-    else startGame();
+    startGame();
   },
+  "round/hint": () => useHint(),
   "progress/reset": resetProgress,
   "debug/grantCoins": grantDebugCoins,
   "timers/tick": () => {
@@ -3049,21 +3406,23 @@ const GAME_ACTION_HANDLERS = {
 rowsInput.addEventListener("change", () => dispatchGameAction("settings/change"));
 colsInput.addEventListener("change", () => dispatchGameAction("settings/change"));
 minesInput.addEventListener("change", () => dispatchGameAction("settings/change"));
-buyShovelButton.addEventListener("click", () => dispatchGameAction("supplies/buyShovel"));
-buyFlagsButton.addEventListener("click", () => dispatchGameAction("supplies/buyFlags"));
+buyShovelButton.addEventListener("click", () => dispatchGameAction("purchase/buy", { id: "supply:shovel" }));
+buyFlagsButton.addEventListener("click", () => dispatchGameAction("purchase/buy", { id: "supply:flags" }));
+buyHintsButton.addEventListener("click", () => dispatchGameAction("purchase/buy", { id: "supply:hints" }));
+useHintButton.addEventListener("click", () => dispatchGameAction("round/hint"));
 equipmentToggleButton.addEventListener("click", () => dispatchGameAction("equipment/toggle"));
-upgradeElements.improveShovel.addEventListener("click", () => dispatchGameAction("progression/improveShovel"));
-upgradeElements.addMine.addEventListener("click", () => dispatchGameAction("progression/buy", { id: "addMine" }));
-upgradeElements.addTreasure.addEventListener("click", () => dispatchGameAction("progression/buy", { id: "addTreasure" }));
-upgradeElements.treasureValue.addEventListener("click", () => dispatchGameAction("progression/buy", { id: "treasureValue" }));
-upgradeElements.betterFlags.addEventListener("click", () => dispatchGameAction("progression/buy", { id: "betterFlags" }));
-upgradeElements.mineYield.addEventListener("click", () => dispatchGameAction("progression/buy", { id: "mineYield" }));
-upgradeElements.shovelCap.addEventListener("click", () => dispatchGameAction("progression/capacity", { kind: "shovel" }));
-upgradeElements.flagCap.addEventListener("click", () => dispatchGameAction("progression/capacity", { kind: "flags" }));
-upgradeElements.tallerGrid.addEventListener("click", () => dispatchGameAction("progression/buy", { id: "tallerGrid" }));
-upgradeElements.widerGrid.addEventListener("click", () => dispatchGameAction("progression/buy", { id: "widerGrid" }));
-abilityElements.safetyRadius.addEventListener("click", () => dispatchGameAction("abilities/buy", { id: "safetyRadius" }));
-abilityElements.chording.addEventListener("click", () => dispatchGameAction("abilities/buy", { id: "chording" }));
+upgradeElements.improveShovel.addEventListener("click", () => dispatchGameAction("purchase/buy", { id: "upgrade:improveShovel" }));
+upgradeElements.addMine.addEventListener("click", () => dispatchGameAction("purchase/buy", { id: "upgrade:addMine" }));
+upgradeElements.addTreasure.addEventListener("click", () => dispatchGameAction("purchase/buy", { id: "upgrade:addTreasure" }));
+upgradeElements.treasureValue.addEventListener("click", () => dispatchGameAction("purchase/buy", { id: "upgrade:treasureValue" }));
+upgradeElements.betterFlags.addEventListener("click", () => dispatchGameAction("purchase/buy", { id: "upgrade:betterFlags" }));
+upgradeElements.mineYield.addEventListener("click", () => dispatchGameAction("purchase/buy", { id: "upgrade:mineYield" }));
+upgradeElements.shovelCap.addEventListener("click", () => dispatchGameAction("purchase/buy", { id: "upgrade:shovelCapacity" }));
+upgradeElements.flagCap.addEventListener("click", () => dispatchGameAction("purchase/buy", { id: "upgrade:flagCapacity" }));
+upgradeElements.tallerGrid.addEventListener("click", () => dispatchGameAction("purchase/buy", { id: "upgrade:tallerGrid" }));
+upgradeElements.widerGrid.addEventListener("click", () => dispatchGameAction("purchase/buy", { id: "upgrade:widerGrid" }));
+abilityElements.safetyRadius.addEventListener("click", () => dispatchGameAction("purchase/buy", { id: "ability:safetyRadius" }));
+abilityElements.chording.addEventListener("click", () => dispatchGameAction("purchase/buy", { id: "ability:chording" }));
 messageBoardListElement.addEventListener("click", (event) => {
   const button = event.target.closest(".js-start-contract");
   if (button) dispatchGameAction("contracts/accept", { id: button.dataset.contractId });

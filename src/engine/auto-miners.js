@@ -1,11 +1,18 @@
 export function createAutoMinerState(specialists, now = 0) {
   return {
+    automationMode: "manual",
     queue: [],
-    workerFields: Object.fromEntries(specialists.map((worker) => [worker.id, 0])),
+    // -1 denotes the visible, player-facing board. Non-negative values refer
+    // to queued fields.
+    workerFields: Object.fromEntries(specialists.map((worker) => [worker.id, -1])),
+    workerPolicies: Object.fromEntries(specialists
+      .filter((worker) => worker.group === "agents")
+      .map((worker) => [worker.id, "focus"])),
     initiative: {
       agents: ["excavator", "flagbearer"],
       specialists: specialists.filter((worker) => worker.group === "specialists").map((worker) => worker.id),
     },
+    workerTasks: {},
     lastSurveyAt: now,
     lastWorkerTickAt: 0,
     statusText: "Hire a Surveyor to begin building the Field Queue.",

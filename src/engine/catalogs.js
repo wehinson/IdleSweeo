@@ -1,6 +1,5 @@
 export const GAME_MODES = Object.freeze({
   fieldQueue: "fieldQueue",
-  autoMiners: "autoMiners",
 });
 
 export const SPECIAL_EQUIPMENT = Object.freeze([
@@ -24,3 +23,37 @@ export const SPECIALISTS = Object.freeze([
 ]);
 
 export const SPECIAL_EQUIPMENT_BY_ID = Object.freeze(Object.fromEntries(SPECIAL_EQUIPMENT.map((item) => [item.id, item])));
+
+export const PURCHASEABLE_KINDS = Object.freeze({
+  supply: "supply",
+  upgrade: "upgrade",
+  ability: "ability",
+  equipment: "equipment",
+});
+
+const upgradePurchaseables = [
+  "tallerGrid",
+  "widerGrid",
+  "improveShovel",
+  "addMine",
+  "addTreasure",
+  "mineYield",
+  "treasureValue",
+  "betterFlags",
+].map((targetId) => ({ id: `upgrade:${targetId}`, kind: PURCHASEABLE_KINDS.upgrade, targetId, telemetryId: `upgrade:${targetId}` }));
+
+export const STORE_PURCHASEABLES = Object.freeze([
+  { id: "supply:shovel", kind: PURCHASEABLE_KINDS.supply, targetId: "shovel", telemetryId: "shovel" },
+  { id: "supply:flags", kind: PURCHASEABLE_KINDS.supply, targetId: "flags", telemetryId: "flags" },
+  { id: "supply:hints", kind: PURCHASEABLE_KINDS.supply, targetId: "hints", telemetryId: "hints" },
+  { id: "upgrade:shovelCapacity", kind: PURCHASEABLE_KINDS.upgrade, targetId: "shovelCapacity", telemetryId: "capacity:shovel" },
+  { id: "upgrade:flagCapacity", kind: PURCHASEABLE_KINDS.upgrade, targetId: "flagCapacity", telemetryId: "capacity:flags" },
+  ...upgradePurchaseables,
+  { id: "ability:safetyRadius", kind: PURCHASEABLE_KINDS.ability, targetId: "safetyRadius", telemetryId: "ability:safetyRadius" },
+  { id: "ability:chording", kind: PURCHASEABLE_KINDS.ability, targetId: "chording", telemetryId: "ability:chording" },
+  ...SPECIAL_EQUIPMENT.map((item) => ({ id: `equipment:${item.id}`, kind: PURCHASEABLE_KINDS.equipment, targetId: item.id, telemetryId: `equipment:${item.id}` })),
+]);
+
+export const STORE_PURCHASEABLE_BY_ID = Object.freeze(
+  Object.fromEntries(STORE_PURCHASEABLES.map((purchaseable) => [purchaseable.id, purchaseable])),
+);

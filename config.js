@@ -8,6 +8,7 @@ const SWEEPER_INC_CONFIG = {
   startingCoins: 10000,
   startingShovels: 10,
   startingFlags: 15,
+  startingHints: 3,
   startingMines: 0,
   digCostPerTile: 1,
   gridLimits: { min: 3, max: 12 },
@@ -21,6 +22,8 @@ const SWEEPER_INC_CONFIG = {
     supplyCost: 25,
     flagBundleSize: 5,
     flagSupplyCost: 10,
+    hintBundleSize: 5,
+    hintSupplyCost: 1000,
     supplyCostMultiplierPerTier: 1.5,
     tiers: [
       { name: "Wooden", durability: 10 },

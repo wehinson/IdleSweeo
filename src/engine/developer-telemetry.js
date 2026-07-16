@@ -6,6 +6,7 @@ export function createDeveloperTelemetry() {
     nextRunNumber: 1,
     currentRun: null,
     completedRuns: [],
+    actions: [],
   };
 }
 
@@ -16,7 +17,16 @@ export function hydrateDeveloperTelemetry(value) {
     nextRunNumber: Math.max(1, Number(telemetry.nextRunNumber) || 1),
     currentRun: telemetry.currentRun ? cloneRun(telemetry.currentRun) : null,
     completedRuns: Array.isArray(telemetry.completedRuns) ? telemetry.completedRuns.map(cloneRun) : [],
+    actions: Array.isArray(telemetry.actions) ? telemetry.actions.map(cloneAction) : [],
   };
+}
+
+// Records a board interaction as a durable audit entry.  This intentionally
+// lives beside the aggregate telemetry rather than in a tile, so the board
+// remains a snapshot of its current state while the save retains its history.
+export function recordDeveloperAction(telemetry, action) {
+  if (!telemetry || !Array.isArray(telemetry.actions)) return;
+  telemetry.actions.push(cloneAction(action));
 }
 
 export function restartDeveloperRun(telemetry, context, now = Date.now()) {
@@ -146,4 +156,8 @@ function mergeMap(target, source = {}) {
 
 function cloneRun(run) {
   return JSON.parse(JSON.stringify(run));
+}
+
+function cloneAction(action) {
+  return JSON.parse(JSON.stringify(action));
 }

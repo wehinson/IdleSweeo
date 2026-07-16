@@ -51,8 +51,21 @@ function validateDeveloperTelemetry(telemetry) {
   if (telemetry.schemaVersion !== 1) throw new Error("The developer telemetry version is invalid.");
   assertFiniteNonNegative(telemetry.nextRunNumber, "developer telemetry run number");
   if (!Array.isArray(telemetry.completedRuns)) throw new Error("The developer telemetry run list is invalid.");
+  if (telemetry.actions !== undefined && !Array.isArray(telemetry.actions)) throw new Error("The developer telemetry action list is invalid.");
   telemetry.completedRuns.forEach((run, index) => validateDeveloperRun(run, `state.developerTelemetry.completedRuns[${index}]`));
   if (telemetry.currentRun !== null) validateDeveloperRun(telemetry.currentRun, "state.developerTelemetry.currentRun");
+  (telemetry.actions || []).forEach((action, index) => validateDeveloperAction(action, `state.developerTelemetry.actions[${index}]`));
+}
+
+function validateDeveloperAction(action, path) {
+  assertPlainObject(action, path);
+  if (!new Set(["player", "worker"]).has(action.actor)) throw new Error(`${path}.actor is invalid.`);
+  if (typeof action.actionType !== "string" || !action.actionType) throw new Error(`${path}.actionType is invalid.`);
+  assertPlainObject(action.target, `${path}.target`);
+  for (const key of ["index", "row", "col"]) assertFiniteNonNegative(action.target[key], `${path}.target.${key}`);
+  assertFiniteNonNegative(action.timeMs, `${path}.timeMs`);
+  if (!Array.isArray(action.evidence)) throw new Error(`${path}.evidence is invalid.`);
+  assertPlainObject(action.result, `${path}.result`);
 }
 
 function validateDeveloperRun(run, path) {
@@ -79,6 +92,7 @@ function validatePlayer(player) {
   for (const key of ["coins", "shovels", "flags", "mines", "shovelUses"]) {
     assertFiniteNonNegative(player[key], `player.${key}`);
   }
+  if (player.hints !== undefined) assertFiniteNonNegative(player.hints, "player.hints");
   assertPlainObject(player.specialEquipment, "player.specialEquipment");
   assertPlainObject(player.specialists, "player.specialists");
   assertPlainObject(player.contracts, "player.contracts");
@@ -122,7 +136,7 @@ function validateAutoMiners(autoMiners) {
   const specialistIds = new Set(SPECIALISTS.map((item) => item.id));
   Object.entries(autoMiners.workerFields).forEach(([id, fieldIndex]) => {
     if (!specialistIds.has(id)) throw new Error(`Unknown Auto Miner specialist id: ${id}`);
-    assertFiniteNonNegative(fieldIndex, `Auto Miner field index for ${id}`);
+    if (!Number.isInteger(fieldIndex) || fieldIndex < -1) throw new Error(`Auto Miner field index for ${id} is invalid.`);
   });
   for (const group of ["agents", "specialists"]) {
     if (!Array.isArray(autoMiners.initiative[group]) || autoMiners.initiative[group].some((id) => !specialistIds.has(id))) {
@@ -131,6 +145,17 @@ function validateAutoMiners(autoMiners) {
   }
   assertFiniteNonNegative(autoMiners.surveyElapsedMs, "Surveyor timer");
   assertFiniteNonNegative(autoMiners.workerElapsedMs, "worker timer");
+  if (autoMiners.automationMode !== undefined && !new Set(["manual", "assist", "analyze"]).has(autoMiners.automationMode)) {
+    throw new Error("The Auto Miner automation mode is invalid.");
+  }
+  if (autoMiners.workerPolicies !== undefined) {
+    assertPlainObject(autoMiners.workerPolicies, "Auto Miner worker policies");
+    Object.entries(autoMiners.workerPolicies).forEach(([id, policy]) => {
+      if (!new Set(["excavator", "flagbearer"]).has(id) || !new Set(["focus", "jump"]).has(policy)) {
+        throw new Error("The Auto Miner worker policy is invalid.");
+      }
+    });
+  }
 }
 
 function validateModeState(mode, path) {

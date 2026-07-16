@@ -11,6 +11,9 @@ export function createBoardCells(settings) {
     flagged: false,
     flaggedByPlayer: false,
     adjacent: 0,
+    provenMine: false,
+    satisfiedClueSafe: false,
+    completeTheCountMine: false,
   }));
 }
 

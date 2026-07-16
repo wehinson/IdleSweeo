@@ -38,6 +38,8 @@
 
           <p id="status" class="status">Sweep the grid. Right-click or long-press to flag.</p>
 
+          <section id="worker-proof" class="worker-proof" aria-live="polite" hidden></section>
+
           <div
             id="board"
             class="board"
@@ -61,8 +63,9 @@
             </div>
           </div>
           <div class="buttons" aria-label="Cabinet mode controls">
+            <button id="use-hint" class="cabinet-mode-button" type="button" title="Reveal a calculated proof">Use Hint</button>
             <button id="field-queue-button" class="cabinet-mode-button is-active" type="button">Field Queue</button>
-            <button id="auto-miners-button" class="cabinet-mode-button cabinet-mode-button--green" type="button">Auto Miners</button>
+            <button id="auto-miners-button" class="cabinet-mode-button cabinet-mode-button--green" type="button">Auto Mine</button>
           </div>
         </section>
       </main>
@@ -91,6 +94,12 @@
             <strong id="flag-stock" class="resource-card__value">15</strong>
             <span id="flag-capacity" class="resource-card__detail">15 max</span>
           </div>
+          <div class="resource-card" id="hint-resource" data-tooltip="Reveal one calculated proof on the active board.">
+            <span class="resource-card__icon" aria-hidden="true">?</span>
+            <span class="resource-card__label">Hints</span>
+            <strong id="hint-stock" class="resource-card__value">3</strong>
+            <span id="hint-capacity" class="resource-card__detail">10 max</span>
+          </div>
           <div class="resource-card" id="mine-resource" data-tooltip="Purchase a Steel Shovel to unlock.">
             <span class="resource-card__icon" aria-hidden="true">✹</span>
             <span class="resource-card__label">Mines</span>
@@ -117,6 +126,10 @@
               <small>+5 flags</small>
             </span>
             <span id="buy-flags-cost" class="store-item__cost">$10</span>
+          </button>
+          <button id="buy-hints" class="store-item" type="button" title="Supplies cannot be bought during a round.">
+            <span class="store-item__copy"><strong>Buy hints</strong><small>+5 hints</small></span>
+            <span id="buy-hints-cost" class="store-item__cost">$1000</span>
           </button>
           <button id="shovel-cap" class="store-item store-item--compact" type="button" hidden>
             <span class="store-item__copy"><strong id="shovel-cap-title">Shovel Locker</strong><small id="shovel-cap-detail">Raise storage cap</small></span>
@@ -206,6 +219,11 @@
           <div class="auto-mine-status">
             <span class="auto-mine-status__label">Queued Fields</span>
             <strong id="auto-mine-field" class="auto-mine-status__value">0 / 5</strong>
+          </div>
+
+          <div class="worker-group">
+            <div class="store__subheader"><span class="store__eyebrow">Automation</span><strong>Board assistance</strong></div>
+            <div id="automation-mode-list" class="specialist-list" aria-label="Automation mode"></div>
           </div>
 
           <div class="worker-group">

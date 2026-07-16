@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   createDeveloperTelemetry,
+  recordDeveloperAction,
   recordDeveloperEvent,
   resolveDeveloperRun,
   restartDeveloperRun,
@@ -38,4 +39,27 @@ test("developer telemetry derives rates, averages, and counter maps", () => {
   assert.equal(summary.mineHitRate, 0.5);
   assert.equal(summary.abandonedBoardRate, 0.5);
   assert.deepEqual(summary.equipmentUses, { probeCharge: 1 });
+});
+
+test("developer telemetry keeps structured board actions", () => {
+  const telemetry = createDeveloperTelemetry();
+  recordDeveloperAction(telemetry, {
+    actor: "worker",
+    specialistId: "excavator",
+    actionType: "dig",
+    target: { index: 4, row: 1, col: 1 },
+    timeMs: 1250,
+    evidence: [{ index: 1, row: 0, col: 1, adjacent: 1, flaggedNeighbors: 1, hiddenNeighbors: 1 }],
+    result: { outcome: "opened", revealedTiles: [4, 5] },
+  });
+
+  assert.deepEqual(telemetry.actions, [{
+    actor: "worker",
+    specialistId: "excavator",
+    actionType: "dig",
+    target: { index: 4, row: 1, col: 1 },
+    timeMs: 1250,
+    evidence: [{ index: 1, row: 0, col: 1, adjacent: 1, flaggedNeighbors: 1, hiddenNeighbors: 1 }],
+    result: { outcome: "opened", revealedTiles: [4, 5] },
+  }]);
 });
