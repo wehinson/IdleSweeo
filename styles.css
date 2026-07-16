@@ -1999,6 +1999,13 @@ select:disabled {
   scrollbar-color: var(--cyan) #080d13;
 }
 
+.settings-panel {
+  max-height: calc(100vh - 40px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-color: var(--cyan) #080d13;
+}
+
 .quartermaster-panel .store-item__copy,
 .quartermaster-panel .store-item__cost,
 .quartermaster-panel .resource-card__detail {
@@ -2069,7 +2076,8 @@ select:disabled {
 
   .quartermaster-panel,
   .contracts-panel,
-  .curio-panel {
+  .curio-panel,
+  .settings-panel {
     max-height: calc(100vh - 24px);
   }
 }
