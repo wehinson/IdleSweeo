@@ -1703,6 +1703,35 @@ body.is-auto-miners .quartermaster-panel > :not(#specialists-panel) {
   transform: translateY(2px);
 }
 
+.save-management {
+  align-items: center;
+  border-top: 2px solid rgba(255, 255, 255, 0.1);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.save-management h3 {
+  color: var(--yellow);
+  font-family: "Press Start 2P", system-ui, sans-serif;
+  font-size: 0.72rem;
+  margin: 4px 0 8px;
+}
+
+.save-management span {
+  color: var(--muted);
+  display: block;
+  font-size: 0.62rem;
+  line-height: 1.5;
+}
+
+.save-management__actions {
+  display: grid;
+  gap: 7px;
+}
+
 @media (max-width: 700px) {
   body {
     align-items: flex-start;
@@ -1883,6 +1912,14 @@ select:disabled {
 
 .fastest-section {
   margin-top: 14px;
+}
+
+.stats-subsection {
+  margin-top: 14px;
+}
+
+.stats-subsection .settings-note {
+  margin: 8px 0 0;
 }
 
 .stats-label {

@@ -305,6 +305,11 @@
             <h3 id="stats-title">Statistics</h3>
           </summary>
           <dl id="stats-grid" class="stats-grid"></dl>
+          <div class="stats-subsection">
+            <span class="stats-label">Developer telemetry · per Field Queue run</span>
+            <dl id="developer-stats-grid" class="stats-grid"></dl>
+            <p id="developer-stats-note" class="settings-note"></p>
+          </div>
           <div class="fastest-section">
             <span class="stats-label">Fastest clears by configuration</span>
             <ul id="fastest-configs" class="fastest-list"></ul>
@@ -319,6 +324,19 @@
           <button id="reset-progress" class="progress-reset__button" type="button">
             Reset
           </button>
+        </section>
+
+        <section class="save-management" aria-labelledby="save-management-title">
+          <div>
+            <span class="settings-panel__eyebrow">Save Data</span>
+            <h3 id="save-management-title">Backup</h3>
+            <span id="save-status" aria-live="polite">Progress saves automatically in this browser.</span>
+          </div>
+          <div class="save-management__actions">
+            <button id="export-save" class="dev-button" type="button">Export Save</button>
+            <button id="import-save" class="dev-button" type="button">Import Save</button>
+            <input id="import-save-input" type="file" accept="application/json,.json" hidden>
+          </div>
         </section>
       </aside>
     </div>
@@ -365,7 +383,6 @@
       </section>
     </div>
 
-    <script src="config.js"></script>
-    <script src="game.js?v=field-cleared-1"></script>
+    <script type="module" src="src/main.js"></script>
   </body>
 </html>

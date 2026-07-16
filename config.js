@@ -3,7 +3,7 @@
 // Upgrade ids are internal and should not be changed after players have started a save.
 // Edit `name`, `description`, `baseCost`, `growth`, and the messages below to rebalance or
 // rename the game without changing game.js. The message guide describes where each message appears.
-window.SWEEPER_INC_CONFIG = {
+const SWEEPER_INC_CONFIG = {
   currencySymbol: "$",
   startingCoins: 10000,
   startingShovels: 10,
@@ -232,15 +232,15 @@ window.SWEEPER_INC_CONFIG = {
     tallerUnlocked: "Taller Grid unlocked: {value} rows available.",
     widerUnlocked: "Wider Grid unlocked: {value} columns available.",
     safetyInstalled: "Safety Radius {value} installed.",
-    chordingUnlocked: "Chording unlocked. Double-click an open numbered tile.",
+    chordingUnlocked: "Chording unlocked. Click an open numbered tile.",
     abilityInstalled: "Ability installed.",
     progressReset: "Progress reset. Fresh purse, fresh tools, fresh ledger.",
     emergency: "{prefix}Quartermaster comped one emergency shovel: {count} digs. {warning}",
-    suppliesReady: "Supplies are stocked between rounds. {name} shovels last {durability} digs.",
+    suppliesReady: "Supplies available. {name} shovels last {durability} digs.",
     suppliesLocked: "Supplies are locked until this round ends.",
     finalShovel: "{name} is the final shovel tier.",
     safetyMax: "Radius 5 is the current cap",
-    chordingReady: "Double-click a numbered tile",
+    chordingReady: "Click a numbered tile",
     chordingDescription: "Regular Minesweeper chording",
     noCompletedBoards: "No completed boards yet.",
     settingsNote: "{mines} mine{plural}, placed after the first click. {safety}",
@@ -255,3 +255,5 @@ window.SWEEPER_INC_CONFIG = {
     challengeWon: " Challenge complete: {name}. +{coins}.",
   },
 };
+
+export default SWEEPER_INC_CONFIG;
